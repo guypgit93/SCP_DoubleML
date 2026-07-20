@@ -1,6 +1,6 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# 05b_pretrend_diagnostics.R
-# Diagnoses why 05_parallel_trends.R's Wald tests flag almost every covariate
+# 05b_stage1_pretrend_diagnostics.R
+# Diagnoses why 05_stage1_parallel_trends.R's Wald tests flag almost every covariate
 # and outcome as "possible pre-trend", including demographic variables with
 # no plausible policy-related trend.
 #
@@ -10,7 +10,7 @@
 # clusters and a single treated cluster (Cameron & Miller 2015; MacKinnon &
 # Webb). The CASE paper this replicates never clusters at region level.
 #
-# Requires 05_parallel_trends.R already run in the same session (reuses
+# Requires 05_stage1_parallel_trends.R already run in the same session (reuses
 # df_a2, df_mdch, df_mdch_flag, run_trend_model(), pretrend_wald(),
 # TABLE_A2_VARS, REF_YEAR, TABLES_DIR, FIGURES_DIR, etc.)
 #
@@ -22,11 +22,11 @@
 # ─────────────────────────────────────────────────────────────────────────────
 
 stopifnot(
-  "Run 05_parallel_trends.R first (df_a2 not found)"        = exists("df_a2"),
-  "Run 05_parallel_trends.R first (df_mdch not found)"      = exists("df_mdch"),
-  "Run 05_parallel_trends.R first (df_mdch_flag not found)" = exists("df_mdch_flag"),
-  "Run 05_parallel_trends.R first (run_trend_model missing)" = exists("run_trend_model"),
-  "Run 05_parallel_trends.R first (pretrend_wald missing)"   = exists("pretrend_wald")
+  "Run 05_stage1_parallel_trends.R first (df_a2 not found)"        = exists("df_a2"),
+  "Run 05_stage1_parallel_trends.R first (df_mdch not found)"      = exists("df_mdch"),
+  "Run 05_stage1_parallel_trends.R first (df_mdch_flag not found)" = exists("df_mdch_flag"),
+  "Run 05_stage1_parallel_trends.R first (run_trend_model missing)" = exists("run_trend_model"),
+  "Run 05_stage1_parallel_trends.R first (pretrend_wald missing)"   = exists("pretrend_wald")
 )
 
 library(fixest)

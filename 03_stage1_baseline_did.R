@@ -1,5 +1,5 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# 03_did_replication.R
+# 03_stage1_baseline_did.R
 # Stage 1: OLS DiD Replication of Stewart (2025) / CASE Paper
 # Scottish Child Payment → Child Material Deprivation
 # ─────────────────────────────────────────────────────────────────────────────
@@ -87,7 +87,7 @@ df[, YEAR_f    := factor(YEAR)]                # factor for FE / event study
 df[, GVTREGN_f := factor(GVTREGN)]            # descriptive/robustness use only; SEs
                                                # clustered at SERNUM (household), not region --
                                                # region-level clustering is anti-conservative
-                                               # here (see 05b_pretrend_diagnostics.R)
+                                               # here (see 05b_stage1_pretrend_diagnostics.R)
 
 # Diagnostic: check treatment/post variation and tp coefficient name
 cat(sprintf("  treated: Scotland=%s  England=%s\n",
@@ -340,7 +340,7 @@ cat("  ✓ Item-level results saved\n")
 # ─────────────────────────────────────────────────────────────────────────────
 # ROBUSTNESS: item-level sample composition & sensitivity to FYE2024
 # MDCH_ITEMS are only populated for FYE2024 respondents on the OLD question
-# wording (~25-30% of that year -- see 05_parallel_trends.R), so FYE2024's
+# wording (~25-30% of that year -- see 05_stage1_parallel_trends.R), so FYE2024's
 # item-level N is thin, especially for Scotland. Check that here, then re-run
 # Stage 1c excluding FYE2024 to see if item-level results depend on it.
 # ─────────────────────────────────────────────────────────────────────────────

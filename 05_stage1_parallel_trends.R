@@ -1,5 +1,5 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# 05_parallel_trends.R
+# 05_stage1_parallel_trends.R
 # Parallel trends diagnostics, replicating CASE paper Table A2 (parallel
 # covariate trends: Scot x Year interactions per household characteristic,
 # no controls) and Table A3 (parallel outcome trends / event study: Scot x
@@ -183,7 +183,7 @@ TABLE_A2_VARS <- c(
   white_hh    = "White households"
 )
 
-# Adjusted-column controls for Table A3 (same parsimonious set as 03_did_replication.R)
+# Adjusted-column controls for Table A3 (same parsimonious set as 03_stage1_baseline_did.R)
 DEMO_COVS    <- c("AGE", "SEX", "ADULTH", "NUMBKIDS")
 INCOME_COVS  <- c("S_OE_BHC", "BENBU_UC_OR_EQUIV", "BENBU_CTC", "BENBU_IS", "BENBU_DLA")
 HOUSING_COVS <- c("TENHBAI")
@@ -199,7 +199,7 @@ run_trend_model <- function(data, outcome, covs = NULL, ref = REF_YEAR, weight =
   if (!is.null(covs) && length(covs) > 0) base <- paste(base, "+", paste(covs, collapse = " + "))
   fml  <- as.formula(paste(base, "| YEAR_f"))
   # Clustered at household (SERNUM), not region -- region clustering is
-  # anti-conservative here (see 05b_pretrend_diagnostics.R)
+  # anti-conservative here (see 05b_stage1_pretrend_diagnostics.R)
   tryCatch(
     feols(fml, data = data, weights = as.formula(paste0("~", weight)),
           cluster = ~SERNUM, notes = FALSE),

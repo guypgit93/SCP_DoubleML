@@ -1,9 +1,9 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# 07_dml_did_item_level.R
+# 07_stage4_dml_item.R
 # Stage 4 (Guy's 2026-07-17 narrative: "which items are affected by SCP" --
 # single-outcome DiD AND DML DiD for each of the 10 MDCH items).
 #
-# Uses the SAME wide, curated covariate set as 06b_dml_did_wide_covariates.R
+# Uses the SAME wide, curated covariate set as 06b_stage3_dml_wide.R
 # (not the lean 7-variable set) -- Guy's explicit decision: "best to just use
 # the wide covariate set, as this is the main benefit of using ML/
 # regularisation." See 06b's header for full curation rationale (which raw
@@ -20,14 +20,14 @@
 # you want to follow up on individually once lasso results are in.
 #
 # Baseline (non-DML) item-level DiD already exists separately in
-# 03b_stacked_item_did.R (OLS, joint household-clustered model) -- that
+# 04_stage2_item_did.R (OLS, joint household-clustered model) -- that
 # satisfies the "single outcome DID" half of Stage 4's brief. This script is
 # the "Double ML DiD for each outcome" half.
 #
 # BH-FDR correction applied within each MLmethod across the 10 items, same
 # convention as 04_dml_did.R Stage 3 and 05_parallel_trends.R.
 #
-# Requires: same packages as 06_dml_did_causalweight.R.
+# Requires: same packages as 06_stage3_dml_lean.R.
 # ─────────────────────────────────────────────────────────────────────────────
 
 library(causalweight)
@@ -83,7 +83,7 @@ for (v in MDCH_ITEMS) {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# WIDE COVARIATE SET -- identical curation to 06b_dml_did_wide_covariates.R
+# WIDE COVARIATE SET -- identical curation to 06b_stage3_dml_wide.R
 # ─────────────────────────────────────────────────────────────────────────────
 CONTINUOUS_VARS <- c(
   "AGE", "AGEHD",                          # AGESP excluded -- structurally NA for non-couples
@@ -227,7 +227,7 @@ if (length(results) > 0) {
   ggsave(file.path(FIGURES_DIR, "dml_did_item_level_wide.png"), p, width = 9, height = 6, dpi = 150)
   cat(sprintf("wrote %s\n", file.path(FIGURES_DIR, "dml_did_item_level_wide.png")))
 
-  cat("\nCompare against 03b_stacked_item_did.R's OLS item-interacted table (baseline single-\n")
+  cat("\nCompare against 04_stage2_item_did.R's OLS item-interacted table (baseline single-\n")
   cat("outcome DiD per item) -- do items that are null under OLS become significant under\n")
   cat("wide-covariate DML, or vice versa?\n")
 } else {

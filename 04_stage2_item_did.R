@@ -1,10 +1,10 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# 03b_stacked_item_did.R
+# 04_stage2_item_did.R
 # Stacked item-level DiD: pools the 10 MDCH items into ONE regression
 # (long format, item + year FE, clustered at household) instead of 10
 # separate ones, so SEs correctly account for within-child correlation
 # across items (Moulton problem). Same 2023-cutoff treatment definition as
-# 03_did_replication.R -- this is a clustering fix, not a timing fix (that's
+# 03_stage1_baseline_did.R -- this is a clustering fix, not a timing fix (that's
 # 04c_agecohort_staggered_did.R).
 #
 # Two specs:
@@ -249,6 +249,6 @@ cat("\n✓ Stacked item-level DiD outputs saved to:\n")
 cat(sprintf("  Table:  %s\n", file.path(TABLES_DIR, "stacked_item_did.csv")))
 cat(sprintf("  Figure: %s\n", file.path(FIGURES_DIR, "stacked_item_coefplot.png")))
 cat("\nCompare pooled coefficient here against Stage 1's mdch_count and mdch_any\n")
-cat("(03_did_replication.R), and compare item-interacted coefficients here\n")
+cat("(03_stage1_baseline_did.R), and compare item-interacted coefficients here\n")
 cat("against Stage 3's 10-separate-regression DR-DiD item table (04_dml_did.R)\n")
 cat("as a triangulation check.\n")

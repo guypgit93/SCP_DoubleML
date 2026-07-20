@@ -1,8 +1,8 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# 06b_dml_did_wide_covariates.R
+# 06b_stage3_dml_wide.R
 # Stage 3 (Guy's 2026-07-17 narrative: "is this sensitive to covariate
 # adjustment/functional form"). Same causalweight::didDML() setup as
-# 06_dml_did_causalweight.R, but with a much richer covariate set instead of
+# 06_stage3_dml_lean.R, but with a much richer covariate set instead of
 # the 7-variable lean set -- deliberately the setting where DML's tolerance
 # for high-dimensional X should show up, unlike att_gt() (04_dml_did.R),
 # which needed the lean set because a rich one-hot covariate set made its
@@ -14,7 +14,7 @@
 # baseline (CASE/Stewart et al. replication). mdch_any results already
 # obtained (lasso -0.0955***, randomforest -0.0626 n.s.) stay valid as a
 # secondary/robustness outcome, just not primary going forward. See
-# 06_dml_did_causalweight.R's header for the interesting lasso-vs-RF reversal
+# 06_stage3_dml_lean.R's header for the interesting lasso-vs-RF reversal
 # under mdch_any (RF beat lasso on the lean set, lost to it on the wide set --
 # likely default `mtry` diluting across many sparse one-hot dummy covariates,
 # something lasso's regularization handles more gracefully).
@@ -54,9 +54,9 @@
 # level dropped.
 #
 # MLmethod restricted to lasso + randomforest (no ensemble -- see
-# 06_dml_did_causalweight.R's header for why: 75min/outcome, not viable).
+# 06_stage3_dml_lean.R's header for why: 75min/outcome, not viable).
 #
-# Requires: same packages as 06_dml_did_causalweight.R.
+# Requires: same packages as 06_stage3_dml_lean.R.
 # ─────────────────────────────────────────────────────────────────────────────
 
 library(causalweight)
@@ -119,7 +119,7 @@ CONTINUOUS_VARS <- c(
 
 # "Category"-typed but count-like -- treated as continuous (ordinal-as-
 # continuous), same convention already used for NUMBKIDS/ADULTH in the lean
-# set (06_dml_did_causalweight.R).
+# set (06_stage3_dml_lean.R).
 COUNT_VARS <- c("NUMBKIDS", "ADULTH")
 
 # Everything else from the KEEP_VARS DML block that survived curation --
@@ -221,7 +221,7 @@ for (ml in ML_METHODS) {
   cat(sprintf("\n== didDML (WIDE covariates): MLmethod='%s' (est='dr', k=%d folds) ====\n",
               ml, K_FOLDS))
   cat(sprintf("  NOTE: %d covariate columns vs 7 in the lean set -- expect meaningfully\n", ncol(x_mat)))
-  cat("  longer runtime than 06_dml_did_causalweight.R's equivalent run.\n")
+  cat("  longer runtime than 06_stage3_dml_lean.R's equivalent run.\n")
   t0 <- Sys.time()
   fit <- tryCatch(
     didDML(
@@ -259,7 +259,7 @@ if (length(results) > 0) {
   print(results_df)
   cat(sprintf("\nwrote %s\n", file.path(TABLES_DIR, "dml_did_wide_covariates_MDCH.csv")))
 
-  cat("\nCompare against 03_did_replication.R's OLS baseline for the official MDCH flag\n")
+  cat("\nCompare against 03_stage1_baseline_did.R's OLS baseline for the official MDCH flag\n")
   cat("(Stage 2 -- the CASE/Stewart et al. replication). That comparison is what Stage 3\n")
   cat("is actually testing: is the baseline sensitive to covariate adjustment/functional form.\n")
   cat("If the wide-set estimates move meaningfully (especially lasso, which does its own\n")
