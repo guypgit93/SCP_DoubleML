@@ -1,0 +1,24 @@
+# ── FRS data — never commit (restricted access via UK Data Service EUL) ──────
+data/
+*.tab
+*.csv
+
+# ── Superseded/redundant scripts — kept locally, not tracked (2026-07-20) ────
+03c_agecohort_stacked_item_did.R
+04_dml_did.R
+04b_chang_dmldid_trial.R
+04c_agecohort_staggered_did.R
+
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+.env
+venv/
+.venv/
+
+# ── OS / editor ───────────────────────────────────────────────────────────────
+.DS_Store
+*.swp
+.idea/
+.vscode/
