@@ -42,7 +42,7 @@
 # Requires: install.packages(c("causalweight", "SuperLearner", "randomForest",
 #                               "xgboost", "glmnet", "e1071", "sandwich"))
 #
-# Uses the existing `post` column from hbai_lca.csv as-is (do NOT recompute
+# Uses the existing `post` column from hbai_clean.csv as-is (do NOT recompute
 # from YEAR>=2023 -- see 01_hbai_prep.R's exact-interview-date refinement for
 # FY2022/23 and the 2026-07-17 fix propagating it through 03/03b/04/04b/04d).
 # ─────────────────────────────────────────────────────────────────────────────
@@ -55,7 +55,7 @@ library(ggplot2)
 # ─────────────────────────────────────────────────────────────────────────────
 # CONFIG
 # ─────────────────────────────────────────────────────────────────────────────
-DATA_PATH   <- "/Users/guypigott/python-venv-demo/Dissertation/data/hbai_lca.csv"
+DATA_PATH   <- "/Users/guypigott/python-venv-demo/Dissertation/data/hbai_clean.csv"
 TABLES_DIR  <- "/Users/guypigott/Claude/Projects/MSc Dissertation/tables"
 FIGURES_DIR <- "/Users/guypigott/Claude/Projects/MSc Dissertation/figures"
 dir.create(TABLES_DIR,  showWarnings = FALSE, recursive = TRUE)
@@ -68,14 +68,14 @@ TRIM       <- 0.05   # package default propensity trim
 
 # Run lasso FIRST when testing -- it's fast and validates the pipeline works
 # end-to-end before committing to the much slower tree/ensemble methods.
-ML_METHODS <- c("lasso", "randomforest", "ensemble")
+ML_METHODS <- c("lasso", "randomforest")
 
 cat("Loading data...\n")
 df <- fread(DATA_PATH)
 df[, YEAR := as.integer(YEAR)]
 
 if (!"post" %in% names(df)) {
-  stop("`post` column not found in hbai_lca.csv -- rerun 01_hbai_prep.R first ",
+  stop("`post` column not found in hbai_clean.csv -- rerun 01_hbai_prep.R first ",
        "(it builds `post` with the exact-interview-date refinement for FY2022/23).")
 }
 df[, treated := as.numeric(scotland)]
@@ -93,26 +93,40 @@ cat(sprintf("  treated: Scotland=%s  England=%s | post: pre=%s  post=%s\n",
             sum(df_mdch$post == 0), sum(df_mdch$post == 1)))
 
 # ─────────────────────────────────────────────────────────────────────────────
-# COVARIATES -- same lean set as 04_dml_did.R's "Adjusted" spec, for direct
-# comparability against the DR-DiD headline. (DML's cross-fitting is designed
-# to tolerate a richer X than att_gt() could handle -- see 04_dml_did.R's
-# comment on singular per-(g,t)-cell models -- so a richer-X robustness pass
-# is a natural extension once this baseline comparison is validated.)
+# COVARIATES -- CASE (Stewart et al. 2025) paper's actual six controls
+# (footnote iii): head aged under 25, female head, ethnicity (five
+# categories), disabled household, lone parent, large family (3+ kids). Same
+# construction as 03_stage1_baseline_did.R's CASE_COVS and
+# 04_stage2_item_did.R -- kept identical across the OLS baseline (03), OLS
+# item-stacked (04), and this DML lean spec, so Stage 3's "is the baseline
+# sensitive to covariate adjustment/functional form" comparison varies ONLY
+# the estimator, not the covariates too. The wide spec (06b/07) is the
+# separate, intentionally-different covariate-breadth comparison.
 # ─────────────────────────────────────────────────────────────────────────────
-LEAN_COVS_RAW <- c("AGE", "NUMBKIDS", "ADULTH", "S_OE_BHC", "S_OE_AHC", "EHCOST")
-LEAN_COVS_RAW <- LEAN_COVS_RAW[LEAN_COVS_RAW %in% names(df_mdch)]
-for (v in LEAN_COVS_RAW) {
-  df_mdch[[paste0(v, "_z")]] <- as.numeric(scale(df_mdch[[v]]))
-}
-LEAN_COVS_Z <- paste0(LEAN_COVS_RAW, "_z")
-if ("DIS" %in% names(df_mdch)) LEAN_COVS_Z <- c(LEAN_COVS_Z, "DIS")
-cat(sprintf("  Covariates: %s\n", paste(LEAN_COVS_Z, collapse = ", ")))
+df_mdch[, young_head          := as.numeric(AGEHDBAND == 1)]
+df_mdch[, female_head         := as.numeric(SEXHD == 2)]
+df_mdch[, disabled_household  := as.numeric(DSCORFAM == 2)]
+df_mdch[, lone_parent         := as.numeric(MARITAL_WITHKID == 1)]
+df_mdch[, large_family        := as.numeric(NUMBKIDS == 3)]
+df_mdch[, ETH_clean           := ifelse(ETH == 99, NA_real_, ETH)]
 
-cols_need <- unique(c("MDCH", "treated", "post", CLUSTERVAR, LEAN_COVS_Z))
+CASE_BINARY_COVS <- c("young_head", "female_head", "disabled_household",
+                       "lone_parent", "large_family")
+CASE_BINARY_COVS <- CASE_BINARY_COVS[CASE_BINARY_COVS %in% names(df_mdch)]
+cat(sprintf("  Covariates (CASE 2025 controls): %s + ETH (5-category, one-hot)\n",
+            paste(CASE_BINARY_COVS, collapse = ", ")))
+
+cols_need <- unique(c("MDCH", "treated", "post", CLUSTERVAR, CASE_BINARY_COVS, "ETH_clean"))
 sub <- na.omit(df_mdch[, ..cols_need])
 cat(sprintf("  Complete-case sample: %s rows\n", format(nrow(sub), big.mark = ",")))
 
-x_mat <- as.data.frame(sub[, ..LEAN_COVS_Z])
+# Ethnicity is the one multi-level control -- one-hot encode into 5 dummy
+# columns (no reference level dropped; fine for lasso/randomforest nuisance
+# models, which don't need OLS's rank restriction and are regularised anyway).
+eth_dummies <- model.matrix(~ factor(ETH_clean) - 1, data = as.data.frame(sub))
+colnames(eth_dummies) <- sub("factor\\(ETH_clean\\)", "ETH_", colnames(eth_dummies))
+
+x_mat <- cbind(as.data.frame(sub[, ..CASE_BINARY_COVS]), as.data.frame(eth_dummies))
 
 # ─────────────────────────────────────────────────────────────────────────────
 # RUN didDML() FOR EACH ML METHOD

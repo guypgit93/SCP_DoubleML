@@ -13,7 +13,8 @@
 #   (b) Item-interacted: item_value ~ treated + tp:item_f | YEAR_f + item_f
 #       one DiD coefficient per item in a single joint model, plus a joint
 #       Wald test of whether all 10 are zero.
-# Both reported Simple (no covariates) and Adjusted (lean z-scored set).
+# Both reported Simple (no covariates) and Adjusted (CASE 2025 controls,
+# see COVARIATE SET section below -- same six variables as 03).
 # ─────────────────────────────────────────────────────────────────────────────
 
 library(data.table)
@@ -24,7 +25,7 @@ library(ggplot2)
 # ─────────────────────────────────────────────────────────────────────────────
 # CONFIG
 # ─────────────────────────────────────────────────────────────────────────────
-DATA_PATH       <- "/Users/guypigott/python-venv-demo/Dissertation/data/hbai_lca.csv"
+DATA_PATH       <- "/Users/guypigott/python-venv-demo/Dissertation/data/hbai_clean.csv"
 TABLES_DIR      <- "/Users/guypigott/Claude/Projects/MSc Dissertation/tables"
 FIGURES_DIR     <- "/Users/guypigott/Claude/Projects/MSc Dissertation/figures"
 dir.create(TABLES_DIR,  showWarnings = FALSE, recursive = TRUE)
@@ -58,7 +59,7 @@ df <- fread(DATA_PATH)
 df[, YEAR    := as.integer(YEAR)]
 df[, treated := as.numeric(scotland)]
 if ("post" %in% names(df)) {
-  cat("  Using `post` already in hbai_lca.csv (may carry 01_hbai_prep.R's exact-interview-date\n")
+  cat("  Using `post` already in hbai_clean.csv (may carry 01_hbai_prep.R's exact-interview-date\n")
   cat("  refinement for FY2022/23) rather than recomputing from YEAR.\n")
   df[, post := as.numeric(post)]
 } else {
@@ -77,18 +78,27 @@ cat(sprintf("  %s rows | years: %s\n",
             paste(sort(unique(df$YEAR)), collapse = ", ")))
 
 # ─────────────────────────────────────────────────────────────────────────────
-# COVARIATE SET (Adjusted spec) -- same lean, z-scored set as 04_dml_did.R
+# COVARIATE SET (Adjusted spec) -- CASE (Stewart et al. 2025) paper's actual
+# six controls (footnote iii): head aged under 25, female head, ethnicity
+# (five categories), disabled household, lone parent, large family (3+ kids).
+# Same construction as 03_stage1_baseline_did.R's CASE_COVS, kept identical
+# so the composite (03) and item-stacked (04) OLS results are directly
+# comparable on covariates, not just on outcome. NOT income/benefit-receipt/
+# housing -- see 03's COVARIATES section header for the mediator/bad-control
+# rationale for excluding those.
 # ─────────────────────────────────────────────────────────────────────────────
-LEAN_COVS_RAW <- c("AGE", "NUMBKIDS", "ADULTH", "S_OE_BHC", "S_OE_AHC", "EHCOST")
-LEAN_COVS_RAW <- LEAN_COVS_RAW[LEAN_COVS_RAW %in% names(df)]
+df[, young_head          := as.numeric(AGEHDBAND == 1)]
+df[, female_head         := as.numeric(SEXHD == 2)]
+df[, disabled_household  := as.numeric(DSCORFAM == 2)]
+df[, lone_parent         := as.numeric(MARITAL_WITHKID == 1)]
+df[, large_family        := as.numeric(NUMBKIDS == 3)]
+df[, ETH_f               := factor(ifelse(ETH == 99, NA, ETH))]
 
-for (v in LEAN_COVS_RAW) {
-  df[[paste0(v, "_z")]] <- as.numeric(scale(df[[v]]))
-}
-LEAN_COVS_Z <- paste0(LEAN_COVS_RAW, "_z")
-if ("DIS" %in% names(df)) LEAN_COVS_Z <- c(LEAN_COVS_Z, "DIS")
+CASE_COVS <- c("young_head", "female_head", "ETH_f",
+               "disabled_household", "lone_parent", "large_family")
+CASE_COVS <- CASE_COVS[CASE_COVS %in% names(df)]
 
-cat(sprintf("  Adjusted-spec covariates: %s\n", paste(LEAN_COVS_Z, collapse = ", ")))
+cat(sprintf("  Adjusted-spec covariates (CASE 2025 controls): %s\n", paste(CASE_COVS, collapse = ", ")))
 
 # ─────────────────────────────────────────────────────────────────────────────
 # RESHAPE WIDE -> LONG (one row per child-year-item)
@@ -96,7 +106,7 @@ cat(sprintf("  Adjusted-spec covariates: %s\n", paste(LEAN_COVS_Z, collapse = ",
 # with all ~90 pipeline columns as id.vars would needlessly 10x the memory
 # footprint for no benefit here.
 # ─────────────────────────────────────────────────────────────────────────────
-id_cols  <- c("SERNUM", "YEAR", "YEAR_f", "treated", "post", "tp", "GS_INDCH", LEAN_COVS_Z)
+id_cols  <- c("SERNUM", "YEAR", "YEAR_f", "treated", "post", "tp", "GS_INDCH", CASE_COVS)
 id_cols  <- id_cols[id_cols %in% names(df)]
 keep_cols <- unique(c(id_cols, MDCH_ITEMS))
 sub <- df[, ..keep_cols]
@@ -121,7 +131,7 @@ fit_pooled_simple <- feols(item_value ~ treated + tp | YEAR_f + item_f,
                             cluster = ~SERNUM, notes = FALSE)
 
 fml_pooled_adj <- as.formula(paste(
-  "item_value ~ treated + tp +", paste(LEAN_COVS_Z, collapse = " + "),
+  "item_value ~ treated + tp +", paste(CASE_COVS, collapse = " + "),
   "| YEAR_f + item_f"
 ))
 fit_pooled_adj <- feols(fml_pooled_adj, data = long, weights = ~GS_INDCH,
@@ -161,7 +171,7 @@ fit_interact_simple <- feols(item_value ~ treated + tp:item_f | YEAR_f + item_f,
                               cluster = ~SERNUM, notes = FALSE)
 
 fml_interact_adj <- as.formula(paste(
-  "item_value ~ treated + tp:item_f +", paste(LEAN_COVS_Z, collapse = " + "),
+  "item_value ~ treated + tp:item_f +", paste(CASE_COVS, collapse = " + "),
   "| YEAR_f + item_f"
 ))
 fit_interact_adj <- feols(fml_interact_adj, data = long, weights = ~GS_INDCH,

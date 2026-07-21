@@ -4,7 +4,7 @@
 # the sample definition and weighting of Table 2 in Stewart et al. (CASE 2025).
 # No regressions -- descriptive tables only.
 #
-# Reads:  hbai_lca.csv        (produced by 01_hbai_prep.R)
+# Reads:  hbai_clean.csv        (produced by 01_hbai_prep.R)
 # Writes: figures/summary_table.csv
 #         figures/sample_composition.csv
 #         figures/background_characteristics.csv   (cf. CASE Table 2)
@@ -20,7 +20,7 @@ library(scales)
 
 # ── Paths ────────────────────────────────────────────────────────────────────
 DATA_ROOT <- "/Users/guypigott/python-venv-demo/Dissertation"
-HBAI_CSV  <- file.path(DATA_ROOT, "data", "hbai_lca.csv")
+HBAI_CSV  <- file.path(DATA_ROOT, "data", "hbai_clean.csv")
 OUT_DIR   <- "figures"
 dir.create(OUT_DIR, showWarnings = FALSE)
 

@@ -2,7 +2,7 @@
 # 01_hbai_prep.R
 # HBAI data prep for the Scottish Child Payment dissertation.
 # Loads the harmonised HBAI extracts, restricts to England/Scotland children,
-# builds deprivation/food-security outcomes and DiD variables, saves hbai_lca.csv.
+# builds deprivation/food-security outcomes and DiD variables, saves hbai_clean.csv.
 #
 # Key choices:
 #   - Scotland/England defined via COUNTRY (1=Eng,2=Wales,3=Scot,4=NI).
@@ -17,7 +17,7 @@ library(tidyverse)
 # ── Paths ────────────────────────────────────────────────────────────────────
 DATA_ROOT <- "/Users/guypigott/python-venv-demo/Dissertation"
 HBAI_ROOT <- file.path(DATA_ROOT, "UKDA-5828-tab", "tab", "23-24prices")
-HBAI_OUT  <- file.path(DATA_ROOT, "data", "hbai_lca.csv")
+HBAI_OUT  <- file.path(DATA_ROOT, "data", "hbai_clean.csv")
 
 HBAI_FILES <- c(
   "i1518e_2324prices.tab",   # 2015/16 - 2017/18

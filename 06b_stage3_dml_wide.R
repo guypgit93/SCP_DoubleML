@@ -67,7 +67,7 @@ library(ggplot2)
 # ─────────────────────────────────────────────────────────────────────────────
 # CONFIG
 # ─────────────────────────────────────────────────────────────────────────────
-DATA_PATH   <- "/Users/guypigott/python-venv-demo/Dissertation/data/hbai_lca.csv"
+DATA_PATH   <- "/Users/guypigott/python-venv-demo/Dissertation/data/hbai_clean.csv"
 TABLES_DIR  <- "/Users/guypigott/Claude/Projects/MSc Dissertation/tables"
 FIGURES_DIR <- "/Users/guypigott/Claude/Projects/MSc Dissertation/figures"
 dir.create(TABLES_DIR,  showWarnings = FALSE, recursive = TRUE)
@@ -84,7 +84,7 @@ df <- fread(DATA_PATH)
 df[, YEAR := as.integer(YEAR)]
 
 if (!"post" %in% names(df)) {
-  stop("`post` column not found in hbai_lca.csv -- rerun 01_hbai_prep.R first.")
+  stop("`post` column not found in hbai_clean.csv -- rerun 01_hbai_prep.R first.")
 }
 df[, treated := as.numeric(scotland)]
 df[, post    := as.numeric(post)]

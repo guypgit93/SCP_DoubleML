@@ -21,7 +21,7 @@
 #            pt_es_<outcome>.png (composite x5, items x10)
 #            pt_es_composite_grid.png, pt_es_items_grid.png
 #
-# Run after 01_hbai_prep.R has produced hbai_lca.csv. Loads its own copy of
+# Run after 01_hbai_prep.R has produced hbai_clean.csv. Loads its own copy of
 # the data, so it can be run independently of 03/04.
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -36,7 +36,7 @@ setFixest_dict(c(treated = "Scotland"))
 # ─────────────────────────────────────────────────────────────────────────────
 # CONFIG
 # ─────────────────────────────────────────────────────────────────────────────
-DATA_PATH   <- "/Users/guypigott/python-venv-demo/Dissertation/data/hbai_lca.csv"
+DATA_PATH   <- "/Users/guypigott/python-venv-demo/Dissertation/data/hbai_clean.csv"
 FIGURES_DIR <- "/Users/guypigott/Claude/Projects/MSc Dissertation/figures"
 TABLES_DIR  <- "/Users/guypigott/Claude/Projects/MSc Dissertation/tables"
 
@@ -85,6 +85,35 @@ for (v in c(MDCH_ITEMS, "mdch_any", "mdch_count", "mdch_severe",
             "food_insecure", "very_low_food_sec")) {
   if (v %in% names(df)) df[[v]] <- suppressWarnings(as.numeric(df[[v]]))
 }
+
+# ─────────────────────────────────────────────────────────────────────────────
+# COVARIATES -- built here, BEFORE any subsample is sliced off df below, since
+# data.table subsets are snapshots: columns added to df afterward would
+# silently not appear in df_a2/df_mdch/df_mdch_flag/df_food (this is the same
+# ordering bug that broke 03_stage1_baseline_did.R's first run).
+#
+# Table A2 covariate definitions match 02_summary_stats.R (confirmed against
+# CASE Table 2 / A1):
+#   NUMBKIDS         == 3  -> larger family (3+ children)
+#   MARITAL_WITHKID  == 1  -> lone parent
+#   AGEHDBAND        == 1  -> young head (16-24)
+#   SEXHD            == 2  -> female head
+#   DSCORFAM         == 2  -> disabled household
+#   ETH              == 1  -> white household (99 = "not declared" -> NA first)
+# ETH_f (5-category factor) is additionally built here -- not used in Table A2
+# (which follows the paper's "% white" balance-table convention) but needed
+# for Table A3's Adjusted spec, which uses CASE (2025)'s actual six controls
+# (ethnicity enters as all five categories there, not just white/non-white).
+# ─────────────────────────────────────────────────────────────────────────────
+df[, ETH := ifelse(ETH == 99, NA_real_, ETH)]
+
+df[, larger_fam  := as.numeric(NUMBKIDS == 3)]
+df[, lone_parent := as.numeric(MARITAL_WITHKID == 1)]
+df[, young_head  := as.numeric(AGEHDBAND == 1)]
+df[, female_head := as.numeric(SEXHD == 2)]
+df[, disabled_hh := as.numeric(DSCORFAM == 2)]
+df[, white_hh    := as.numeric(ETH == 1)]
+df[, ETH_f       := factor(ETH)]
 
 # ── Subsamples (FYE 2024 kept everywhere -- same MDCH definition as earlier years) ──
 df_a2        <- df[!is.na(MDCH) & !is.na(GS_INDCH) & GS_INDCH > 0]
@@ -138,27 +167,9 @@ cat("  wrote table_mdch_revision_check.csv\n")
 avail_items <- MDCH_ITEMS[MDCH_ITEMS %in% names(df_mdch)]
 
 # ─────────────────────────────────────────────────────────────────────────────
-# TABLE A2 COVARIATES -- definitions match 02_summary_stats.R (confirmed
-# against CASE Table 2 / A1):
-#   NUMBKIDS         == 3  -> larger family (3+ children)
-#   MARITAL_WITHKID  == 1  -> lone parent
-#   AGEHDBAND        == 1  -> young head (16-24)
-#   SEXHD            == 2  -> female head
-#   DSCORFAM         == 2  -> disabled household
-#   ETH              == 1  -> white household (99 = "not declared" -> NA first)
+# TABLE A2 COVARIATE DIAGNOSTICS -- sanity-check the dummies built above
+# (before the subsamples) still look non-degenerate in this subsample.
 # ─────────────────────────────────────────────────────────────────────────────
-df[, ETH := ifelse(ETH == 99, NA_real_, ETH)]
-
-df[, larger_fam  := as.numeric(NUMBKIDS == 3)]
-df[, lone_parent := as.numeric(MARITAL_WITHKID == 1)]
-df[, young_head  := as.numeric(AGEHDBAND == 1)]
-df[, female_head := as.numeric(SEXHD == 2)]
-df[, disabled_hh := as.numeric(DSCORFAM == 2)]
-df[, white_hh    := as.numeric(ETH == 1)]
-
-# Re-run df_a2 now that the covariates exist on df
-df_a2 <- df[!is.na(MDCH) & !is.na(GS_INDCH) & GS_INDCH > 0]
-
 cat("\n--- Table A2 covariate diagnostics (sanity-check before trusting results) ---\n")
 for (v in c("larger_fam", "lone_parent", "young_head", "female_head", "disabled_hh", "white_hh")) {
   cat(sprintf("  %-14s  mean = %.3f  (n non-missing = %s)\n", v,
@@ -183,12 +194,16 @@ TABLE_A2_VARS <- c(
   white_hh    = "White households"
 )
 
-# Adjusted-column controls for Table A3 (same parsimonious set as 03_stage1_baseline_did.R)
-DEMO_COVS    <- c("AGE", "SEX", "ADULTH", "NUMBKIDS")
-INCOME_COVS  <- c("S_OE_BHC", "BENBU_UC_OR_EQUIV", "BENBU_CTC", "BENBU_IS", "BENBU_DLA")
-HOUSING_COVS <- c("TENHBAI")
-OLS_COVS     <- c(DEMO_COVS, INCOME_COVS, HOUSING_COVS)
-avail_covs   <- OLS_COVS[OLS_COVS %in% names(df)]
+# Adjusted-column controls for Table A3 -- CASE (Stewart et al. 2025) paper's
+# actual six controls (footnote iii), identical construction to
+# 03_stage1_baseline_did.R's CASE_COVS / 04_stage2_item_did.R /
+# 06_stage3_dml_lean.R. Reuses the dummies already built above for Table A2
+# (young_head, female_head, disabled_hh, lone_parent, larger_fam) plus the
+# 5-category ethnicity factor (ETH_f) -- NOT the old ad-hoc demographic/
+# income/housing set. See 03's COVARIATES section for the mediator/bad-
+# control rationale for excluding income and benefit-receipt.
+CASE_COVS  <- c("young_head", "female_head", "ETH_f", "disabled_hh", "lone_parent", "larger_fam")
+avail_covs <- CASE_COVS[CASE_COVS %in% names(df)]
 
 # ─────────────────────────────────────────────────────────────────────────────
 # HELPERS
