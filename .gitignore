@@ -8,6 +8,7 @@ data/
 04_dml_did.R
 04b_chang_dmldid_trial.R
 04c_agecohort_staggered_did.R
+04d_propensity_overlap.R
 
 # ── Python ────────────────────────────────────────────────────────────────────
 __pycache__/
@@ -22,3 +23,28 @@ venv/
 *.swp
 .idea/
 .vscode/
+
+# ── Non-script project files — repo is scripts-only (2026-07-20) ────────────
+# Kept on disk, just not tracked. Add explicit exceptions above this block
+# with `!filename` if a specific one should be committed later.
+*.docx
+*.pptx
+*.ppt
+*.pdf
+*.xlsx
+*.xls
+*.png
+*.jpg
+*.jpeg
+*.md
+*.txt
+config.py
+Papers/
+figures/
+tables/
+archive/
+~$*
+testfile_delete_me.txt
+
+# ── Exceptions to the non-script rules above ──────────────────────────────
+!README.md
