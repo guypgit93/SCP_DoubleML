@@ -51,17 +51,26 @@ ALPHA      <- 0.05
 MDCH_ITEMS <- c("MDCH_BED", "MDCH_CEL", "MDCH_COAT", "MDCH_EQP", "MDCH_HOL",
                 "MDCH_PLAY", "MDCH_PLY",  "MDCH_TEA",  "MDCH_TRP", "MDCH_VEG")
 
+# Labels corrected 2026-07-28 against the official HBAI item wording in
+# 5828_hbai_2425_harmonised_dataset_variables_guide.xlsx -- three were wrong,
+# not just imprecise: MDCH_TEA is "Have friends round for tea or a snack once
+# a fortnight" (a social/hospitality item), NOT fresh fruit/veg -- that's
+# actually MDCH_VEG ("Eat fresh fruit and/or vegetables every day"), which had
+# been labelled just "Vegetables". MDCH_EQP is "Leisure equipment such as
+# sports equipment or a bicycle", NOT school equipment. MDCH_PLAY is "Go to a
+# playgroup at least once a week" (an early-years attendance item), NOT
+# generic indoor play. Do not revert to the old labels.
 MDCH_LABELS <- c(
   MDCH_BED  = "Bed / bedroom",
   MDCH_CEL  = "Celebrations",
   MDCH_COAT = "Warm coat",
-  MDCH_EQP  = "School equipment",
+  MDCH_EQP  = "Leisure/sports equipment",
   MDCH_HOL  = "Holiday away",
-  MDCH_PLAY = "Indoor play / games",
+  MDCH_PLAY = "Playgroup attendance",
   MDCH_PLY  = "Outdoor play area",
-  MDCH_TEA  = "Fresh fruit / veg",
-  MDCH_TRP  = "Trips / outings",
-  MDCH_VEG  = "Vegetables"
+  MDCH_TEA  = "Friends round for tea/snack",
+  MDCH_TRP  = "School trip",
+  MDCH_VEG  = "Fresh fruit/veg daily"
 )
 
 # ─────────────────────────────────────────────────────────────────────────────

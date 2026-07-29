@@ -10,14 +10,36 @@
 # KEEP_VARS were dropped and why) and the missingness fixes (WFTCBU/EMPSTATI/
 # ERENTBU/BENBU_UC excluded -- see that script's comments).
 #
-# MLmethod defaults to lasso ONLY. Wide-set lasso took 1377s (~23min) for one
-# outcome in 06b -- looping that over 10 items is ~230min (~4hrs), long but
-# tractable overnight/unattended. Wide-set randomforest's runtime is untested
-# but likely much longer (lean-set RF was already 602s vs lasso's 89s, a 6.8x
-# multiple; a similar multiple on wide-lasso's 1377s would put wide-RF per
-# item well past an hour, i.e. 10+ hours for the full item loop). NOT viable
-# to loop blindly -- add "randomforest" to ML_METHODS only for specific items
-# you want to follow up on individually once lasso results are in.
+# MLmethod: lasso-only run completed 2026-07-21 (results already in
+# dml_did_item_level_wide.csv -- see below, NOT rerun by this version).
+# ZERO of 10 items were BH-significant under lasso (vs. 2 under 03's OLS
+# item-level regressions) -- see results_narrative.docx Section 8.
+#
+# 2026-07-21: added "randomforest" as a second method, per Guy's request, to
+# see (1) actual wide-set RF-per-item runtime (the "10+ hours" estimate below
+# was written before 06b's composite-outcome finding that wide-RF (2657s) was
+# actually FASTER than wide-lasso (4111s) on the full sample -- so that
+# estimate may be too pessimistic) and (2) whether RF changes any
+# significance conclusions. Also worth testing as a side effect: two items
+# (Warm coat, Outdoor play area) took ~3hrs each under lasso despite similar
+# sample sizes to other items that took 22-35min -- a plausible cause is
+# quasi-separation in one of glmnet's propensity sub-models, which has no
+# real analogue for randomForest's greedy tree-splitting (no MLE/convergence
+# step to fail). If RF does NOT reproduce that slowdown on the same two
+# items, that's supporting evidence for the quasi-separation theory; if it
+# DOES, that points to something harder in those items' data specifically.
+#
+# This run-mode change (ML_METHODS below) only runs the methods NOT already
+# present in the saved CSV for a given item, and merges with what's already
+# there -- lasso's confirmed numbers are never re-fit or overwritten.
+#
+# SAFETY NETS added 2026-07-21 (the lasso run had no checkpointing -- a hang
+# on a later item would have lost every earlier-completed item's result):
+#   - TIMEOUT_SECS: each item x method fit is capped via setTimeLimit(); a
+#     fit that exceeds this is treated as a failure (skipped, not blocking).
+#   - After every item completes, the full accumulated results-so-far are
+#     rewritten to a checkpoint CSV, so an interruption only costs whatever
+#     is currently in flight, never anything already finished.
 #
 # Baseline (non-DML) item-level DiD already exists separately in
 # 04_stage2_item_did.R (OLS, joint household-clustered model) -- that
@@ -48,22 +70,37 @@ ALPHA      <- 0.05
 CLUSTERVAR <- "SERNUM"
 K_FOLDS    <- 3
 TRIM       <- 0.05
-ML_METHODS <- c("lasso")   # see header -- add "randomforest" selectively, not by default
+ML_METHODS <- c("lasso", "randomforest")   # lasso already confirmed 2026-07-21; RF added per Guy's request
+TIMEOUT_SECS <- 9000   # 2.5hr cap per item x method fit (generous above composite-level wide-RF's 2657s);
+                        # a fit exceeding this is treated as failed/skipped, not left to block indefinitely.
+                        # CAVEAT: setTimeLimit() can only interrupt at points R checks for it -- a single
+                        # long-running call into compiled C/Fortran code (e.g. deep inside glmnet or
+                        # randomForest's internals) may not yield control back until it finishes regardless
+                        # of this limit. It should catch most pathological cases (like Warm coat/Outdoor
+                        # play's ~3hr lasso runs) but is not a guaranteed hard kill -- if a fit still runs
+                        # past TIMEOUT_SECS with no sign of stopping, you may still need to kill the R
+                        # process manually, same as before.
+
+MAIN_OUT_CSV       <- file.path(TABLES_DIR, "dml_did_item_level_wide.csv")
+CHECKPOINT_OUT_CSV <- file.path(TABLES_DIR, "dml_did_item_level_wide_CHECKPOINT.csv")
 
 MDCH_ITEMS <- c("MDCH_BED", "MDCH_CEL", "MDCH_COAT", "MDCH_EQP", "MDCH_HOL",
                 "MDCH_PLAY", "MDCH_PLY", "MDCH_TEA", "MDCH_TRP", "MDCH_VEG")
 
 MDCH_LABELS <- c(
+  # Labels corrected 2026-07-28 against the official HBAI item wording (see
+  # 03_stage1_baseline_did.R's header for the full rationale) -- MDCH_TEA,
+  # MDCH_EQP and MDCH_PLAY were factually wrong, not just imprecise.
   MDCH_BED  = "Bed / bedroom",
   MDCH_CEL  = "Celebrations",
   MDCH_COAT = "Warm coat",
-  MDCH_EQP  = "School equipment",
+  MDCH_EQP  = "Leisure/sports equipment",
   MDCH_HOL  = "Holiday away",
-  MDCH_PLAY = "Indoor play / games",
+  MDCH_PLAY = "Playgroup attendance",
   MDCH_PLY  = "Outdoor play area",
-  MDCH_TEA  = "Fresh fruit / veg",
-  MDCH_TRP  = "Trips / outings",
-  MDCH_VEG  = "Vegetables"
+  MDCH_TEA  = "Friends round for tea/snack",
+  MDCH_TRP  = "School trip",
+  MDCH_VEG  = "Fresh fruit/veg daily"
 )
 
 cat("Loading data...\n")
@@ -151,13 +188,36 @@ cat(sprintf("  Design matrix: %d columns, %s rows (before per-item outcome filte
 # cc_covs$.rowid maps each row of x_mat_full back to the original df row, so
 # each item's own missingness can be applied on top without rebuilding the
 # whole covariate matrix per item.
+#
+# Resume/skip logic: if MAIN_OUT_CSV already has a row for a given
+# item x MLmethod combination (e.g. lasso, confirmed 2026-07-21), that
+# combination is NOT refit -- its saved row is carried forward as-is. This
+# means adding "randomforest" to ML_METHODS above only runs the new cells.
 # ─────────────────────────────────────────────────────────────────────────────
 results <- list()
+if (file.exists(MAIN_OUT_CSV)) {
+  prior <- read.csv(MAIN_OUT_CSV, stringsAsFactors = FALSE)
+  for (i in seq_len(nrow(prior))) {
+    key <- paste(prior$item[i], prior$MLmethod[i])
+    results[[key]] <- prior[i, setdiff(names(prior), c("pval_bh", "sig_bh")), drop = FALSE]
+  }
+  cat(sprintf("Loaded %d already-confirmed item x method result(s) from %s -- these will NOT be refit.\n",
+              length(results), MAIN_OUT_CSV))
+}
+
 run_i <- 0
-total_runs <- length(MDCH_ITEMS) * length(ML_METHODS)
-est_min_per_lasso_run <- 1377 / 60   # from 06b's wide-lasso timing on this same covariate set
-cat(sprintf("\nEstimated runtime if all lasso: ~%.0f min total (%d items x ~%.0f min each)\n",
-            length(MDCH_ITEMS) * est_min_per_lasso_run, length(MDCH_ITEMS), est_min_per_lasso_run))
+already_done <- length(results)
+to_run <- sum(!sapply(MDCH_ITEMS, function(it) sapply(ML_METHODS, function(ml) paste(it, ml) %in% names(results))))
+cat(sprintf("Cells to run this session: %d (already have %d)\n", to_run, already_done))
+
+save_checkpoint <- function() {
+  if (length(results) == 0) return(invisible())
+  ck <- bind_rows(results) |>
+    group_by(MLmethod) |>
+    mutate(pval_bh = p.adjust(pval, method = "BH"), sig_bh = pval_bh < ALPHA) |>
+    ungroup()
+  write.csv(ck, CHECKPOINT_OUT_CSV, row.names = FALSE)
+}
 
 item_vals_by_rowid <- df[cc_covs$.rowid, ..MDCH_ITEMS]  # aligned to cc_covs row order
 
@@ -172,20 +232,32 @@ for (item in MDCH_ITEMS) {
 
   for (ml in ML_METHODS) {
     run_i <- run_i + 1
-    cat(sprintf("\n== [%d/%d] item=%s (%s)  MLmethod='%s'  (n=%s, %d dropped for item NA) ====\n",
-                run_i, total_runs, item, MDCH_LABELS[item], ml,
-                format(length(y_vec), big.mark = ","), n_item_na))
+    key <- paste(item, ml)
+    if (key %in% names(results)) {
+      cat(sprintf("\n== [%d] item=%s  MLmethod='%s'  -- already confirmed, skipping ====\n",
+                  run_i, item, ml))
+      next
+    }
+    cat(sprintf("\n== [%d] item=%s (%s)  MLmethod='%s'  (n=%s, %d dropped for item NA, timeout=%ds) ====\n",
+                run_i, item, MDCH_LABELS[item], ml,
+                format(length(y_vec), big.mark = ","), n_item_na, TIMEOUT_SECS))
     t0 <- Sys.time()
-    fit <- tryCatch(
-      didDML(y = y_vec, d = d_vec, t = t_vec, x = x_mat,
-             MLmethod = ml, est = "dr", trim = TRIM, cluster = cl_vec, k = K_FOLDS),
-      error = function(e) { cat(sprintf("  ✗ failed: %s\n", e$message)); NULL }
-    )
+    fit <- tryCatch({
+      setTimeLimit(elapsed = TIMEOUT_SECS, transient = TRUE)
+      res <- didDML(y = y_vec, d = d_vec, t = t_vec, x = x_mat,
+                     MLmethod = ml, est = "dr", trim = TRIM, cluster = cl_vec, k = K_FOLDS)
+      setTimeLimit(elapsed = Inf, transient = TRUE)
+      res
+    }, error = function(e) {
+      setTimeLimit(elapsed = Inf, transient = TRUE)
+      cat(sprintf("  ✗ failed or timed out after %ds: %s\n", TIMEOUT_SECS, e$message))
+      NULL
+    })
     elapsed <- round(as.numeric(Sys.time() - t0, units = "secs"), 1)
     if (is.null(fit)) next
 
     crit <- qnorm(1 - ALPHA / 2)
-    results[[paste(item, ml)]] <- data.frame(
+    results[[key]] <- data.frame(
       item = item, label = unname(MDCH_LABELS[item]), MLmethod = ml, covset = "wide",
       ATET = fit$ATET, se = fit$se, pval = fit$pval,
       ci_lo = fit$ATET - crit * fit$se, ci_hi = fit$ATET + crit * fit$se,
@@ -194,6 +266,9 @@ for (item in MDCH_ITEMS) {
     sig <- ifelse(fit$pval < .01, "***", ifelse(fit$pval < .05, "**", ifelse(fit$pval < .1, "*", "")))
     cat(sprintf("  ATET=%8.4f  SE=%8.4f  p=%6.3f  %s  (%.1fs)\n",
                 fit$ATET, fit$se, fit$pval, sig, elapsed))
+
+    save_checkpoint()   # rewrite full accumulated results-so-far after EVERY completed fit
+    cat(sprintf("  checkpoint written (%s)\n", CHECKPOINT_OUT_CSV))
   }
 }
 
@@ -206,11 +281,14 @@ if (length(results) > 0) {
     mutate(pval_bh = p.adjust(pval, method = "BH"), sig_bh = pval_bh < ALPHA) |>
     ungroup()
 
-  write.csv(results_df, file.path(TABLES_DIR, "dml_did_item_level_wide.csv"), row.names = FALSE)
+  write.csv(results_df, MAIN_OUT_CSV, row.names = FALSE)
   cat("\n── Item-level DML DiD, wide covariates (BH-corrected within MLmethod) ──\n")
-  print(results_df |> select(label, MLmethod, ATET, se, pval, pval_bh, sig_bh) |>
+  print(results_df |> select(label, MLmethod, ATET, se, pval, pval_bh, sig_bh, runtime_s) |>
           mutate(across(where(is.numeric), \(x) round(x, 4))), n = Inf)
-  cat(sprintf("\nwrote %s\n", file.path(TABLES_DIR, "dml_did_item_level_wide.csv")))
+  cat(sprintf("\nwrote %s (final, includes both lasso and randomforest)\n", MAIN_OUT_CSV))
+  cat(sprintf("Compare randomforest rows against lasso rows above to answer Guy's two questions:\n"))
+  cat(sprintf("  1) runtime -- see runtime_s column per method\n"))
+  cat(sprintf("  2) significance -- compare pval_bh and sig_bh columns across MLmethod\n"))
 
   plot_df <- results_df |> mutate(label = factor(label, levels = rev(unique(label))))
   p <- ggplot(plot_df, aes(x = ATET, y = label, xmin = ci_lo, xmax = ci_hi, colour = sig_bh)) +

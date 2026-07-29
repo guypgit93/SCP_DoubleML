@@ -39,16 +39,19 @@ MDCH_ITEMS <- c("MDCH_BED", "MDCH_CEL", "MDCH_COAT", "MDCH_EQP", "MDCH_HOL",
                 "MDCH_PLAY", "MDCH_PLY", "MDCH_TEA", "MDCH_TRP", "MDCH_VEG")
 
 MDCH_LABELS <- c(
+  # Labels corrected 2026-07-28 against the official HBAI item wording (see
+  # 03_stage1_baseline_did.R's header for the full rationale) -- MDCH_TEA,
+  # MDCH_EQP and MDCH_PLAY were factually wrong, not just imprecise.
   MDCH_BED  = "Bed / bedroom",
   MDCH_CEL  = "Celebrations",
   MDCH_COAT = "Warm coat",
-  MDCH_EQP  = "School equipment",
+  MDCH_EQP  = "Leisure/sports equipment",
   MDCH_HOL  = "Holiday away",
-  MDCH_PLAY = "Indoor play / games",
+  MDCH_PLAY = "Playgroup attendance",
   MDCH_PLY  = "Outdoor play area",
-  MDCH_TEA  = "Fresh fruit / veg",
-  MDCH_TRP  = "Trips / outings",
-  MDCH_VEG  = "Vegetables"
+  MDCH_TEA  = "Friends round for tea/snack",
+  MDCH_TRP  = "School trip",
+  MDCH_VEG  = "Fresh fruit/veg daily"
 )
 
 # ─────────────────────────────────────────────────────────────────────────────
