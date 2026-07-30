@@ -68,6 +68,20 @@ TRIM       <- 0.05   # package default propensity trim
 
 # Run lasso FIRST when testing -- it's fast and validates the pipeline works
 # end-to-end before committing to the much slower tree/ensemble methods.
+# "ensemble" added 2026-07-29 per supervisor's guidance (Zimmert 2020's own
+# preferred nuisance-model choice -- a SuperLearner combination of lasso,
+# randomforest, xgboost and svm) -- run here on the PRIMARY outcome (official
+# MDCH flag) for the first time; already run on the secondary mdch_any
+# outcome earlier (ensemble -0.0891**, see header note above and the
+# untouched dml_did_causalweight_comparison.csv for that outcome).
+#
+# 2026-07-29: ensemble run completed on this outcome (ATET=-0.0405, SE=0.0217,
+# p=0.061, 2085.6s) but the OLD write.csv() below overwrote the file with just
+# that one row -- lasso/randomforest were never in the same `results` list
+# because they hadn't been (re)run in that execution. Fixed the save step
+# below to MERGE with whatever's already in the CSV instead of overwriting it
+# wholesale. Now just backfilling lasso+randomforest (fast, seconds each) so
+# the saved table has all three methods without re-running ensemble.
 ML_METHODS <- c("lasso", "randomforest")
 
 cat("Loading data...\n")
@@ -187,13 +201,35 @@ if (length(results) > 0) {
   # (dml_did_causalweight_comparison.csv: lasso -0.0648*, RF -0.0824**,
   # ensemble -0.0891**) is intentionally NOT overwritten; kept as the
   # secondary-outcome table.
-  write.csv(results_df, file.path(TABLES_DIR, "dml_did_causalweight_comparison_MDCH.csv"), row.names = FALSE)
-  cat("\n── MLmethod comparison (official MDCH flag) ────────────────────────────\n")
+  #
+  # MERGE with whatever's already saved, rather than overwrite wholesale --
+  # this file only gets fully rebuilt across MULTIPLE runs of ML_METHODS
+  # subsets (e.g. ensemble alone took 35 min, so lasso/RF get backfilled in a
+  # separate fast run). Without this, write.csv() would silently drop any
+  # method not in *this* execution's `results` list, even if it succeeded and
+  # was saved in a previous run. Bit us once on 2026-07-29 -- ensemble's row
+  # briefly wiped out an earlier lasso/RF-only save.
+  out_path <- file.path(TABLES_DIR, "dml_did_causalweight_comparison_MDCH.csv")
+  if (file.exists(out_path)) {
+    prev_df <- tryCatch(read.csv(out_path, stringsAsFactors = FALSE), error = function(e) NULL)
+    if (!is.null(prev_df) && "MLmethod" %in% names(prev_df)) {
+      prev_df <- prev_df[!(prev_df$MLmethod %in% results_df$MLmethod), ]  # this run's methods win
+      results_df <- bind_rows(prev_df, results_df)
+    }
+  }
+  results_df <- results_df[match(unique(results_df$MLmethod), results_df$MLmethod), ]  # de-dupe, keep order stable
+  write.csv(results_df, out_path, row.names = FALSE)
+  cat("\n── MLmethod comparison (official MDCH flag) -- merged with any prior save ──\n")
   print(results_df)
   cat(sprintf("\nwrote %s\n", file.path(TABLES_DIR, "dml_did_causalweight_comparison_MDCH.csv")))
 
   # ── Coefficient plot: lasso (linear benchmark) vs RF/ensemble (flexible) ──
-  plot_df <- results_df |> mutate(MLmethod = factor(MLmethod, levels = rev(ML_METHODS)))
+  # Levels drawn from results_df itself (not just this run's ML_METHODS) so a
+  # method merged in from a previous run (e.g. ensemble) still appears.
+  method_order <- c("lasso", "randomforest", "xgboost", "svm", "ensemble", "parametric")
+  method_order <- c(intersect(method_order, results_df$MLmethod),
+                     setdiff(results_df$MLmethod, method_order))
+  plot_df <- results_df |> mutate(MLmethod = factor(MLmethod, levels = rev(method_order)))
   p <- ggplot(plot_df, aes(x = ATET, y = MLmethod, xmin = ci_lo, xmax = ci_hi)) +
     geom_vline(xintercept = 0, linetype = "dashed", colour = "grey50") +
     geom_errorbarh(height = 0.2, colour = "#2c7bb6") +

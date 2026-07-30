@@ -1,0 +1,30 @@
+\documentclass[12pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{times}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{setspace}
+\usepackage{booktabs}
+\usepackage{amsmath}
+\usepackage{graphicx}
+\usepackage[round]{natbib}
+\usepackage[colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue]{hyperref}
+
+\title{The Scottish Child Payment and Child Material Deprivation: \\ A Doubly Robust Difference-in-Differences Analysis}
+\author{Guy Pigott \\ MSc Economics and Data Science \\ University of Manchester}
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+\noindent
+This dissertation asks whether the Scottish Child Payment (SCP), a means-tested weekly cash transfer for low-income households with children, reduced child material deprivation. Comparing Scotland against England in a difference-in-differences design using repeated cross-sectional FRS/HBAI data (2017--2024), baseline OLS shows SCP reduced official material deprivation by 6.2--7.6 percentage points, robust to clustering and a placebo test. A doubly robust, cross-fitted ML estimator (Zimmert 2020, \texttt{didDML}) shrinks this to 2.8--4.5 percentage points, significant only under random forest. Decomposing the flag into its ten items, only celebrations and a warm coat are significant under uncorrected OLS, and neither survives Benjamini--Hochberg correction; re-estimating each item by DML, and jointly via a stacked-outcome DML model, likewise finds zero significant items after correction---a null converging across three methods. Falsification checks on Wales and Northern Ireland, which never received SCP, return null coefficients. SCP shows a real but modest aggregate effect, without a robust item-specific channel.
+\end{abstract}
+
+\vspace{1em}
+\noindent\textbf{Keywords:} child material deprivation, cash transfers, difference-in-differences, double/debiased machine learning, Scottish Child Payment
+
+\end{document}

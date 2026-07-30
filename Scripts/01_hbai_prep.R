@@ -9,6 +9,13 @@
 #   - food_insecure uses FOODSEC_STATUS_CAT (official DWP category), HHSHARE==1 only.
 #   - Primary deprivation outcome is MDCH (official DWP flag), not a homemade item count.
 #   - mdch_observed = !is.na(MDCH).
+#   - Also pulls household interview date from the RAW FRS household files
+#     (across all available FRS years, not just FY2022/23) to (a) set the
+#     exact 14 Nov 2022 SCP post cutoff and (b) add quarter_label/
+#     quarter_start/quarter_index columns replicating CASE (Andersen, Nesom,
+#     Patrick, Pinter, Stewart & Tominey 2025, CASE paper 238) Table A3's
+#     rolling 13-week quarters, for use by 05c_stage1_parallel_trends_quarterly.R.
+#     HBAI's own harmonised extract carries no interview-date field.
 # Requires: tidyverse
 # =============================================================================
 
@@ -249,72 +256,135 @@ df <- df |>
   )
 
 # =============================================================================
-# EXACT POST CUTOFF (14 Nov 2022) -- overwrites `post` for FY2022/23 only
-# HBAI's harmonised extract has no interview-date variable, so this merges in
-# UKDA-9252 (FRS 2022/23) household file if present. No-op if not found.
+# INTERVIEW DATE (all years) -- exact 14 Nov 2022 post cutoff + CASE-style
+# quarter bins
+# HBAI's harmonised extract has no interview-date variable, so this pulls
+# INTDATE from each year's RAW FRS household file and merges by SERNUM+YEAR
+# (not SERNUM alone -- SERNUM isn't guaranteed unique across FRS years, only
+# safe here because each year is parsed and tagged with YEAR before
+# stacking). No-op (columns stay NA) for any year whose household file isn't
+# found, e.g. FY2016/17 has no FRS raw download in this project.
+#
+# Used for two things:
+#   (a) `post`/`did` get the exact 14 Nov 2022 cutoff for FY2022/23 (as
+#       before -- other years keep the FY-based post/did, that choice is
+#       unchanged)
+#   (b) quarter_label/quarter_start/quarter_index -- rolling 13-week windows
+#       anchored on the 14th of Feb/May/Aug/Nov, replicating CASE (Andersen,
+#       Nesom, Patrick, Pinter, Stewart & Tominey 2025, CASE paper 238)
+#       Table A3 exactly (confirmed against the actual PDF's row labels, e.g.
+#       "Scot * 14th November 2022 - 13th February 2023"). Consumed by
+#       05c_stage1_parallel_trends_quarterly.R.
 # =============================================================================
-FRS_ROOT <- file.path(DATA_ROOT, "UKDA-9252-tab", "tab")
+FRS_YEARS <- c(
+  "UKDA-8336" = 2017,   # 2016-17
+  "UKDA-8460" = 2018,   # 2017-18
+  "UKDA-8633" = 2019,   # 2018-19
+  "UKDA-8802" = 2020,   # 2019-20
+  "UKDA-8948" = 2021,   # 2020-21 (COVID year -- already excluded from df above, kept here for completeness/no-op)
+  "UKDA-9073" = 2022,   # 2021-22 (SCP introduced Feb 2021)
+  "UKDA-9252" = 2023,   # 2022-23 (SCP expanded Nov 2022)
+  "UKDA-9367" = 2024    # 2023-24
+)
 hhold_pattern <- "^(hhold|househol|hhld|household)(_v[0-9]+)?\\.tab$"
-hhold_found <- if (dir.exists(FRS_ROOT)) {
-  list.files(FRS_ROOT, pattern = hhold_pattern, recursive = TRUE, full.names = TRUE, ignore.case = TRUE)
-} else {
-  character(0)
+
+find_hhold <- function(ukda_folder) {
+  tab_root <- file.path(DATA_ROOT, paste0(ukda_folder, "-tab"), "tab")
+  if (!dir.exists(tab_root)) return(NA_character_)
+  found <- list.files(tab_root, pattern = hhold_pattern, recursive = TRUE,
+                      full.names = TRUE, ignore.case = TRUE)
+  if (length(found) == 0) return(NA_character_)
+  if (any(grepl("v2", found, ignore.case = TRUE))) found[grepl("v2", found, ignore.case = TRUE)][1] else found[1]
 }
 
-# Prefer a "v2" (corrected re-release) path if one exists
-hhold_path <- if (length(hhold_found) == 0) {
-  NA_character_
-} else if (any(grepl("v2", hhold_found, ignore.case = TRUE))) {
-  hhold_found[grepl("v2", hhold_found, ignore.case = TRUE)][1]
-} else {
-  hhold_found[1]
-}
-
-if (is.na(hhold_path)) {
-  cat(sprintf("\nFRS household file for FY2022/23 not found under %s -- `post` stays FY-based.\n", FRS_ROOT))
-} else {
-  cat(sprintf("\nUsing: %s\n", hhold_path))
-  hh <- read_tsv(hhold_path, show_col_types = FALSE, col_types = cols(.default = col_character()))
+parse_hhold_dates <- function(path, year_int) {
+  cat(sprintf("  Using: %s (FYE %d)\n", path, year_int))
+  hh <- read_tsv(path, show_col_types = FALSE, col_types = cols(.default = col_character()))
   names(hh) <- toupper(trimws(names(hh)))
 
   date_col <- intersect(c("INTDATE", "INTDATM", "INTDAT"), names(hh))
   if (length(date_col) == 0) {
-    cat("  No column named INTDATE/INTDATM/INTDAT found -- `post` stays FY-based.\n")
-  } else {
-    raw_dates <- hh[[date_col[1]]]
-
-    # UKDA has used both MM/DD/YYYY text and a numeric day-count (origin
-    # 1960-01-01) across versions of this file -- detect which one this is.
-    looks_like_slash_date <- any(grepl("/", raw_dates), na.rm = TRUE)
-    if (looks_like_slash_date) {
-      hh_dates <- hh |>
-        transmute(
-          SERNUM  = suppressWarnings(as.numeric(SERNUM)),
-          intdate = suppressWarnings(as.Date(raw_dates, format = "%m/%d/%Y"))
-        )
-    } else {
-      hh_dates <- hh |>
-        transmute(
-          SERNUM  = suppressWarnings(as.numeric(SERNUM)),
-          intdate = suppressWarnings(as.Date(as.numeric(raw_dates), origin = "1960-01-01"))
-        )
-    }
-    hh_dates <- hh_dates |> filter(!is.na(SERNUM), !is.na(intdate))
-    cat(sprintf("  Parsed %s of %s rows to valid dates.\n", nrow(hh_dates), nrow(hh)))
-
-    df <- df |>
-      left_join(hh_dates, by = "SERNUM") |>
-      mutate(
-        post = if_else(YEAR == 2023 & !is.na(intdate),
-                        as.numeric(intdate >= as.Date("2022-11-14")),
-                        post),
-        did  = treated * post
-      )
-    cat(sprintf("  FY2022/23 rows reclassified: %s Pre, %s Post (of %s total in that year)\n",
-                format(sum(df$YEAR == 2023 & df$post == 0), big.mark = ","),
-                format(sum(df$YEAR == 2023 & df$post == 1), big.mark = ","),
-                format(sum(df$YEAR == 2023), big.mark = ",")))
+    cat("    No column named INTDATE/INTDATM/INTDAT found -- skipping this year.\n")
+    return(NULL)
   }
+  raw_dates <- hh[[date_col[1]]]
+
+  # UKDA has used both MM/DD/YYYY text and a numeric day-count (origin
+  # 1960-01-01) across versions of this file -- detect which one this is.
+  looks_like_slash_date <- any(grepl("/", raw_dates), na.rm = TRUE)
+  if (looks_like_slash_date) {
+    out <- hh |> transmute(SERNUM  = suppressWarnings(as.numeric(SERNUM)),
+                           intdate = suppressWarnings(as.Date(raw_dates, format = "%m/%d/%Y")))
+  } else {
+    out <- hh |> transmute(SERNUM  = suppressWarnings(as.numeric(SERNUM)),
+                           intdate = suppressWarnings(as.Date(as.numeric(raw_dates), origin = "1960-01-01")))
+  }
+  out <- out |> filter(!is.na(SERNUM), !is.na(intdate))
+  out$YEAR <- year_int
+  cat(sprintf("    Parsed %s of %s rows to valid dates.\n", nrow(out), nrow(hh)))
+  out
+}
+
+hh_dates_list <- list()
+for (ukda_folder in names(FRS_YEARS)) {
+  year_int <- FRS_YEARS[[ukda_folder]]
+  path <- find_hhold(ukda_folder)
+  if (is.na(path)) {
+    cat(sprintf("  ! %s (FYE %d): household file not found under %s-tab/tab/ -- skipping.\n",
+                ukda_folder, year_int, ukda_folder))
+    next
+  }
+  parsed <- parse_hhold_dates(path, year_int)
+  if (!is.null(parsed) && nrow(parsed) > 0) hh_dates_list[[ukda_folder]] <- parsed
+}
+
+if (length(hh_dates_list) == 0) {
+  cat("\nNo FRS household files loaded -- `post` stays FY-based, no quarter columns added.\n")
+} else {
+  hh_dates <- bind_rows(hh_dates_list)
+  cat(sprintf("\nCombined interview dates: %s rows across %d FRS years.\n",
+              format(nrow(hh_dates), big.mark = ","), length(hh_dates_list)))
+
+  # CASE (2025) Table A3 rolling-quarter bins: 13-week windows anchored on
+  # the 14th of Feb/May/Aug/Nov -- NOT calendar quarters.
+  anchor_mmdd <- c("02-14", "05-14", "08-14", "11-14")
+  assign_quarter <- function(d) {
+    if (is.na(d)) return(c(label = NA_character_, start = NA_character_))
+    yr <- as.integer(format(d, "%Y"))
+    candidates <- sort(as.Date(paste0(rep((yr - 1):(yr + 1), each = 4), "-", anchor_mmdd)))
+    start <- max(candidates[candidates <= d])
+    end   <- min(candidates[candidates > d]) - 1
+    c(label = sprintf("%s_%s", format(start, "%Y-%m-%d"), format(end, "%Y-%m-%d")),
+      start = as.character(start))
+  }
+  q <- t(vapply(hh_dates$intdate, assign_quarter, character(2)))
+  hh_dates$quarter_label <- q[, "label"]
+  hh_dates$quarter_start <- as.Date(q[, "start"])
+  quarter_levels <- sort(unique(hh_dates$quarter_start[!is.na(hh_dates$quarter_start)]))
+  hh_dates$quarter_index <- match(hh_dates$quarter_start, quarter_levels)
+  cat(sprintf("  %d distinct quarter windows: %s to %s\n",
+              length(quarter_levels), min(quarter_levels), max(quarter_levels)))
+
+  dupes <- hh_dates |> count(SERNUM, YEAR) |> filter(n > 1)
+  if (nrow(dupes) > 0) {
+    cat(sprintf("  *** WARNING: %d SERNUM+YEAR combos appear more than once in the household files",
+                nrow(dupes)), " -- merge below will duplicate rows for these. Investigate. ***\n")
+  }
+
+  df <- df |>
+    left_join(hh_dates, by = c("SERNUM", "YEAR")) |>
+    mutate(
+      post = if_else(YEAR == 2023 & !is.na(intdate),
+                      as.numeric(intdate >= as.Date("2022-11-14")),
+                      post),
+      did  = treated * post
+    )
+  cat(sprintf("  FY2022/23 rows reclassified: %s Pre, %s Post (of %s total in that year)\n",
+              format(sum(df$YEAR == 2023 & df$post == 0), big.mark = ","),
+              format(sum(df$YEAR == 2023 & df$post == 1), big.mark = ","),
+              format(sum(df$YEAR == 2023), big.mark = ",")))
+  cat("  Quarter match rate by year (0%% = no FRS raw download for that year):\n")
+  print(df |> group_by(YEAR) |> summarise(matched = mean(!is.na(quarter_label)), .groups = "drop"))
 }
 
 # =============================================================================

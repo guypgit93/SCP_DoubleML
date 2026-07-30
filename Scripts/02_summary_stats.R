@@ -5,10 +5,10 @@
 # No regressions -- descriptive tables only.
 #
 # Reads:  hbai_clean.csv        (produced by 01_hbai_prep.R)
-# Writes: figures/summary_table.csv
-#         figures/sample_composition.csv
-#         figures/background_characteristics.csv   (cf. CASE Table 2)
-#         figures/table_a1_by_period.csv            (cf. CASE Table A1)
+# Writes: tables/summary_table.csv
+#         tables/sample_composition.csv
+#         tables/background_characteristics.csv   (cf. CASE Table 2)
+#         tables/table_a1_by_period.csv            (cf. CASE Table A1)
 #         figures/summary_plot.png
 #
 # Packages required: tidyverse, scales
@@ -19,10 +19,16 @@ library(tidyverse)
 library(scales)
 
 # ── Paths ────────────────────────────────────────────────────────────────────
-DATA_ROOT <- "/Users/guypigott/python-venv-demo/Dissertation"
-HBAI_CSV  <- file.path(DATA_ROOT, "data", "hbai_clean.csv")
-OUT_DIR   <- "figures"
-dir.create(OUT_DIR, showWarnings = FALSE)
+DATA_ROOT   <- "/Users/guypigott/python-venv-demo/Dissertation"
+HBAI_CSV    <- file.path(DATA_ROOT, "data", "hbai_clean.csv")
+# Absolute paths, matching the convention used by every other script in the
+# pipeline (03/05c/07 etc.) -- previously a relative "figures" path, which
+# meant output landed wherever R's working directory happened to be rather
+# than in the project folder (fixed 2026-07-30).
+TABLES_DIR  <- "/Users/guypigott/Claude/Projects/MSc Dissertation/tables"
+FIGURES_DIR <- "/Users/guypigott/Claude/Projects/MSc Dissertation/figures"
+dir.create(TABLES_DIR, showWarnings = FALSE, recursive = TRUE)
+dir.create(FIGURES_DIR, showWarnings = FALSE, recursive = TRUE)
 
 SCP_EXPAND_YEAR <- 2023   # FY 2022/23: SCP extended to all under-16s, £25/week
 
@@ -69,7 +75,7 @@ sample_composition <- df |>
 
 cat("\n--- Sample composition by year and group ---\n")
 print(sample_composition)
-write_csv(sample_composition, file.path(OUT_DIR, "sample_composition.csv"))
+write_csv(sample_composition, file.path(TABLES_DIR, "sample_composition.csv"))
 
 # =============================================================================
 # ANALYTIC SAMPLE for sections 3-5
@@ -144,7 +150,7 @@ background_table <- bind_rows(background_table, n_row)
 
 cat("\n--- Background characteristics by group (cf. CASE Table 2) ---\n")
 print(background_table)
-write_csv(background_table, file.path(OUT_DIR, "background_characteristics.csv"))
+write_csv(background_table, file.path(TABLES_DIR, "background_characteristics.csv"))
 
 # =============================================================================
 # 3b. TABLE A1: same characteristics, split by group x period (All/Pre/Post)
@@ -202,7 +208,7 @@ table_a1 <- bind_rows(table_a1, n_a1)
 
 cat("\n--- Table A1: characteristics by group x period (cf. CASE Table A1) ---\n")
 print(table_a1)
-write_csv(table_a1, file.path(OUT_DIR, "table_a1_by_period.csv"))
+write_csv(table_a1, file.path(TABLES_DIR, "table_a1_by_period.csv"))
 
 # =============================================================================
 # 4. SUMMARY STATISTICS TABLE
@@ -223,7 +229,7 @@ summary_table <- df_mdch |>
 
 cat("\n--- Summary statistics table ---\n")
 print(summary_table)
-write_csv(summary_table, file.path(OUT_DIR, "summary_table.csv"))
+write_csv(summary_table, file.path(TABLES_DIR, "summary_table.csv"))
 
 # =============================================================================
 # 5. PLOT
@@ -248,8 +254,9 @@ p <- ggplot(annual, aes(x = YEAR, y = mean_val, colour = group)) +
   theme_minimal(base_size = 12) +
   theme(legend.position = "bottom")
 
-ggsave(file.path(OUT_DIR, "summary_plot.png"), p, width = 7, height = 4.5, dpi = 200)
+ggsave(file.path(FIGURES_DIR, "summary_plot.png"), p, width = 7, height = 4.5, dpi = 200)
 
-cat("\nDone. Outputs written to figures/:\n")
+cat("\nDone. Tables written to tables/:\n")
 cat("  summary_table.csv, sample_composition.csv, background_characteristics.csv,\n")
-cat("  table_a1_by_period.csv, summary_plot.png\n")
+cat("  table_a1_by_period.csv\n")
+cat("Plot written to figures/: summary_plot.png\n")
