@@ -42,6 +42,7 @@ config.py
 Papers/
 figures/
 tables/
+latex/
 archive/
 ~$*
 testfile_delete_me.txt
