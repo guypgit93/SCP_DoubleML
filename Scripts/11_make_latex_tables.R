@@ -68,12 +68,8 @@ esc <- function(x) gsub("([&%$#_{}])", "\\\\\\1", x)
 # threeparttable/tablenotes so this has zero extra package dependencies
 # beyond a standard article class with booktabs.
 write_tex_table <- function(file, colspec, header, body_lines, caption, label,
-                              notes = NULL) {
-  lines <- c(
-    "\\begin{table}[htbp]",
-    "\\centering",
-    paste0("\\caption{", caption, "}"),
-    paste0("\\label{", label, "}"),
+                              notes = NULL, wide = FALSE) {
+  tabular_lines <- c(
     paste0("\\begin{tabular}{", colspec, "}"),
     "\\toprule",
     paste0(header, " \\\\"),
@@ -82,8 +78,29 @@ write_tex_table <- function(file, colspec, header, body_lines, caption, label,
     "\\bottomrule",
     "\\end{tabular}"
   )
+  # `wide = TRUE` wraps the tabular in \resizebox to shrink it to \textwidth --
+  # used for tables with many numeric columns (e.g. six-way country/period
+  # splits) that otherwise overflow the page margin under pdflatex. This is
+  # the one place this script relies on graphicx beyond booktabs, but the
+  # dissertation's own main.tex already loads graphicx for figures, so it's
+  # not an extra dependency in practice.
+  if (wide) {
+    tabular_lines <- c("\\resizebox{\\textwidth}{!}{%", tabular_lines, "}")
+  }
+  lines <- c(
+    "\\begin{table}[htbp]",
+    "\\centering",
+    paste0("\\caption{", caption, "}"),
+    paste0("\\label{", label, "}"),
+    tabular_lines
+  )
   if (!is.null(notes)) {
-    lines <- c(lines, "\\vspace{4pt}", paste0("{\\footnotesize ", notes, "}"))
+    # blank line here is load-bearing: without it, \end{tabular} and the
+    # footnotesize note run on as the same paragraph, so on any table
+    # narrower than \textwidth the note typesets beside the tabular instead
+    # of below it (found 2026-07-31 building the LaTeX draft -- Table 1/3
+    # in main.tex both showed this before the blank line was added).
+    lines <- c(lines, "", "\\vspace{4pt}", paste0("{\\footnotesize ", notes, "}"))
   }
   lines <- c(lines, "\\end{table}")
   writeLines(lines, file)
@@ -121,11 +138,22 @@ stage1_composite <- function() {
   }
   n_item_row <- function(df) df$n_obs[df$outcome == "Any deprivation (mdch_any)"]
   n_flag_row <- function(df) df$n_obs[df$outcome == "Official MDCH flag"]
-  body <- c(body, "\\midrule",
-            paste("N (item outcomes)",
-                  n_item_row(simple), n_item_row(adj), n_item_row(ext), sep = " & ") %+% " \\\\",
-            paste("N (MDCH flag)",
-                  n_flag_row(simple), n_flag_row(adj), n_flag_row(ext), sep = " & ") %+% " \\\\")
+  n_food_row <- function(df) df$n_obs[df$outcome == "Food insecurity"]
+  footer <- c("\\midrule",
+              paste("N (item outcomes)",
+                    n_item_row(simple), n_item_row(adj), n_item_row(ext), sep = " & ") %+% " \\\\",
+              paste("N (MDCH flag)",
+                    n_flag_row(simple), n_flag_row(adj), n_flag_row(ext), sep = " & ") %+% " \\\\")
+  # Food insecurity row only appears once table_simple_did.csv etc. have been
+  # regenerated with the new "Food insecurity" outcome added to
+  # 03_stage1_baseline_did.R's simple_outcomes list -- guarded so this
+  # function doesn't break against the older CSVs in the meantime.
+  if (length(n_food_row(simple)) > 0) {
+    footer <- c(footer,
+                paste("N (food insecurity)",
+                      n_food_row(simple), n_food_row(adj), n_food_row(ext), sep = " & ") %+% " \\\\")
+  }
+  body <- c(body, footer)
 
   write_tex_table(
     file.path(OUT_DIR, "stage1_composite.tex"),
@@ -135,7 +163,9 @@ stage1_composite <- function() {
     caption = "Stage 1: baseline difference-in-differences, composite and official outcomes",
     label = "tab:stage1_composite",
     notes = paste(sig_note,
-      "Simple: no covariates. Adjusted: six CASE controls (Stewart et al., 2025). Extended: Adjusted plus child age.")
+      "Simple: no covariates. Adjusted: six CASE controls (Stewart et al., 2025). Extended: Adjusted plus child age.",
+      "Food insecurity is reported here for comparability with Stewart et al. (2025) only; it is not one of the ten MDCH items and is not carried into the item-level or DML decomposition in Stages 2--5.",
+      "The food-insecurity module is only observed in FRS from FYE2020 (FYE2017-2019 are structurally unavailable, not merely non-response), so this estimate is identified off a shorter pre-period (FYE2020 only, vs. FYE2017-2020 for the other outcomes) than the rest of the table; the resulting sample size closely matches Stewart et al.'s (2025) own food-insecurity analysis ($n=27{,}511$), consistent with the same underlying data constraint rather than a difference in sample construction. The quarterly pre-trend test for this outcome (Table~\\ref{tab:parallel_trends_quarterly_wald}) does not flag a violation.")
   )
 }
 
@@ -148,7 +178,11 @@ stage1_items <- function() {
   body <- character(0)
   for (i in seq_len(nrow(d))) {
     r <- d[i, ]
-    sigmark <- ifelse(r$sig_bh == "✓", "✓", "")
+    # plain "Yes" rather than a literal unicode checkmark -- pdflatex (as
+    # opposed to xelatex/lualatex) errors on raw unicode glyphs like U+2713
+    # unless inputenc/fontenc are specially configured, and this way there's
+    # no extra package dependency either
+    sigmark <- ifelse(r$sig_bh == "✓", "Yes", "")
     row1 <- paste(esc(r$label),
                    fmt(r$coef) %+% stars(r$pval),
                    format(r$n, big.mark = ","),
@@ -413,7 +447,8 @@ summary_a1_by_period <- function() {
     body_lines = body,
     caption = "Background characteristics by country and period, cf. Table A1 of Stewart et al. (CASE, 2025)",
     label = "tab:summary_a1_by_period",
-    notes = "Weighted proportions (\\texttt{GS\\_INDCH}). Pre/Post split at the November 2022 SCP full-rollout cutoff."
+    notes = "Weighted proportions (\\texttt{GS\\_INDCH}). Pre/Post split at the November 2022 SCP full-rollout cutoff.",
+    wide = TRUE
   )
 }
 
@@ -480,10 +515,95 @@ summary_outcomes_table <- function() {
   )
 }
 
+# ── Stage 1b'': CASE exact-replication spec, full coefficients ─────────────
+# CASE-Table-3-style layout: two panels (Official MDCH flag / Food insecurity)
+# side by side, every coefficient shown (not just the DiD term), reading
+# table_case_exact_did.csv (one row per term x outcome, from
+# 03_stage1_baseline_did.R's Stage 1b'' block: y ~ treated + post + tp +
+# controls | YEAR_f).
+#
+# Term labels below, esp. the ETH_f2-5 -> Mixed/Asian/Black/Other mapping,
+# were NOT taken from a codebook (none was available) -- they were confirmed
+# empirically by matching this spec's coefficients against Stewart et al.'s
+# (2025) own published Table 3 values, which line up closely for every
+# ethnicity category on both outcomes (e.g. ETH_f4 = 0.178 here vs their
+# Black = 0.178 on the MDCH flag; 0.086 here vs their 0.087 on food
+# insecurity). Re-confirm against the actual FRS ETH codebook if one becomes
+# available before this goes in the final write-up.
+#
+# No Constant/Intercept row: feols() with `| YEAR_f` absorbs the intercept
+# into the year fixed effects, unlike CASE's table which reports one --
+# not comparable, deliberately omitted rather than shown as a fake blank row.
+stage1_case_exact <- function() {
+  path <- file.path(TABLES_DIR, "table_case_exact_did.csv")
+  if (!file.exists(path)) { cat("  ⚠ table_case_exact_did.csv not found in tables/ -- skipping.\n"); return(invisible(NULL)) }
+  d <- read.csv(path)
+
+  term_labels <- c(
+    tp                 = "Scotland $\\times$ Post",
+    treated             = "Scotland",
+    post                = "Post",
+    young_head          = "Young household head",
+    female_head         = "Female household head",
+    ETH_f2              = "\\hspace{1em}Mixed",
+    ETH_f3              = "\\hspace{1em}Asian",
+    ETH_f4              = "\\hspace{1em}Black",
+    ETH_f5              = "\\hspace{1em}Other",
+    disabled_household  = "Disability in household",
+    lone_parent         = "Lone parent household",
+    large_family        = "Large family household"
+  )
+  term_order <- names(term_labels)
+
+  panels <- c("Official MDCH flag", "Food insecurity")
+  panel_labels <- c("A: Child material deprivation", "B: Food insecurity")
+  if (!all(panels %in% d$outcome)) {
+    cat("  ⚠ table_case_exact_did.csv missing one of:", paste(panels, collapse=", "), "-- skipping.\n")
+    return(invisible(NULL))
+  }
+
+  header <- paste("", paste(panel_labels, collapse = " & "), sep = " & ")
+  body <- character(0)
+  # Ethnicity subheading row, matching CASE's layout
+  eth_row_after <- "female_head"
+  for (term in term_order) {
+    a <- d[d$outcome == panels[1] & d$term == term, ]
+    b <- d[d$outcome == panels[2] & d$term == term, ]
+    if (nrow(a) == 0 && nrow(b) == 0) next
+    get1 <- function(df, col) if (nrow(df) == 1) df[[col]][1] else NA_real_
+    row1 <- paste(term_labels[[term]],
+                   ifelse(is.na(get1(a,"coef")), "--", fmt(get1(a,"coef")) %+% stars(get1(a,"pval"))),
+                   ifelse(is.na(get1(b,"coef")), "--", fmt(get1(b,"coef")) %+% stars(get1(b,"pval"))),
+                   sep = " & ")
+    row2 <- paste("",
+                   ifelse(is.na(get1(a,"se")), "", paste0("(", fmt(get1(a,"se")), ")")),
+                   ifelse(is.na(get1(b,"se")), "", paste0("(", fmt(get1(b,"se")), ")")),
+                   sep = " & ")
+    body <- c(body, paste0(row1, " \\\\"), paste0(row2, " \\\\"))
+    if (term == eth_row_after) body <- c(body, "Ethnicity (ref.\\ White) & & \\\\")
+  }
+  n_row <- function(outcome) unique(d$n_obs[d$outcome == outcome])
+  body <- c(body, "\\midrule",
+            "Controls and year FE & Yes & Yes \\\\",
+            paste("N", format(n_row(panels[1]), big.mark=","), format(n_row(panels[2]), big.mark=","), sep = " & ") %+% " \\\\")
+
+  write_tex_table(
+    file.path(OUT_DIR, "stage1_case_exact.tex"),
+    colspec = "l c c",
+    header = header,
+    body_lines = body,
+    caption = "Stage 1: CASE exact-replication spec (explicit Post term), all coefficients, cf. Table 3 of Stewart et al. (2025)",
+    label = "tab:stage1_case_exact",
+    notes = paste(sig_note,
+      "Diagnostic robustness spec, not the headline Adjusted/Extended results reported elsewhere -- adds an explicit \\texttt{post} term alongside \\texttt{treated}, \\texttt{tp}, the six CASE controls, and year fixed effects, nesting Stewart et al.'s (2025) equation (1). Ethnicity category labels (Mixed/Asian/Black/Other, ref.\\ White) were confirmed empirically against Stewart et al.'s own Table 3 coefficients, not a codebook. Stewart et al.\\ use a stricter significance convention ($^{*}p<0.05$, $^{**}p<0.01$, $^{***}p<0.001$) than the $p<0.10/0.05/0.01$ used throughout this table and elsewhere in this dissertation -- do not compare star counts directly across the two.")
+  )
+}
+
 # ── run all ──────────────────────────────────────────────────────────────
 
 cat("Generating LaTeX tables into:", OUT_DIR, "\n\n")
 cat("Stage 1 (composite)...\n"); stage1_composite()
+cat("Stage 1 (CASE exact-replication)...\n"); stage1_case_exact()
 cat("Stage 1 (items)...\n");     stage1_items()
 cat("Stage 2 (stacked)...\n");   stage2_stacked()
 cat("Stage 3 (DML composite)...\n"); stage3_dml_composite()

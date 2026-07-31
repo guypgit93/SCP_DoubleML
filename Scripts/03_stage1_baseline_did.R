@@ -32,7 +32,14 @@ library(patchwork)
 setFixest_dict(c(
   tp      = "DiD (Scotland x Post)",
   treated = "Scotland",
-  post    = "Post (FYE 2023)"
+  # Label describes intent, not a guarantee -- `post` is built in
+  # 01_hbai_prep.R as YEAR>=2023 for every year EXCEPT FYE2023, which is
+  # overwritten using real FRS household interview dates against the exact
+  # 14-Nov-2022 SCP full-rollout cutoff (see that script's "FY2022/23 rows
+  # reclassified" console line to confirm the merge succeeded when the CSV
+  # was last built -- if it silently fell back to FY-only, this label would
+  # be wrong and `post` would just mean YEAR>=2023 with no sub-year precision).
+  post    = "Post (14-Nov-2022 cutoff)"
 ))
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -151,9 +158,16 @@ df[, ETH_f               := factor(ifelse(ETH == 99, NA, ETH))]  # 99 = not decl
 # ── Subsamples (created after tp AND the covariates above are added to df) ───
 df_mdch      <- df[mdch_observed == 1]      # MDCH module observed
 df_mdch_flag <- df[!is.na(MDCH)]           # official DWP flag, 2017-2024
+# Food insecurity is a separate USDA-derived module (WhoFood questions) with
+# its own availability window/non-response pattern -- deliberately NOT
+# restricted to df_mdch's "MDCH module observed" criterion, which describes
+# completion of the (unrelated) deprivation-item battery. Own subsample,
+# same pattern as df_mdch_flag above.
+df_food      <- df[!is.na(food_insecure)]  # food security module observed
 
 cat(sprintf("  MDCH items subsample:     %s rows\n", format(nrow(df_mdch),      big.mark=",")))
 cat(sprintf("  MDCH official flag:       %s rows\n", format(nrow(df_mdch_flag), big.mark=",")))
+cat(sprintf("  Food insecurity module:   %s rows\n", format(nrow(df_food),      big.mark=",")))
 
 # CASE (2025) replication spec -- exactly the paper's six controls.
 CASE_COVS <- c("young_head", "female_head", "ETH_f",
@@ -200,7 +214,14 @@ simple_outcomes <- list(
   "Any deprivation (mdch_any)"    = list(data = df_mdch,      y = "mdch_any"),
   "Deprivation count (mdch_count)"= list(data = df_mdch,      y = "mdch_count"),
   "Severe deprivation"            = list(data = df_mdch,      y = "mdch_severe"),
-  "Official MDCH flag"            = list(data = df_mdch_flag, y = "MDCH")
+  "Official MDCH flag"            = list(data = df_mdch_flag, y = "MDCH"),
+  # Baseline-only, for comparability with Stewart et al. (CASE, 2025), who
+  # include food insecurity alongside material deprivation in their headline
+  # table. NOT carried into Stage 2+ (item-level/DML decomposition): food
+  # insecurity is not one of the ten MDCH items, so it has no place in an
+  # item-level breakdown of material deprivation specifically -- see
+  # Methodology 4.x for the explicit scope note.
+  "Food insecurity"               = list(data = df_food,      y = "food_insecure")
 )
 
 simple_models <- lapply(simple_outcomes, function(spec) {
@@ -229,7 +250,7 @@ etable(simple_models,
        keep_raw  = "^tp$",
        se.below  = TRUE,
        signif.code = c("***"=.01, "**"=.05, "*"=.1),
-       headers   = list("mdch_any", "mdch_count", "mdch_severe", "MDCH flag"))
+       headers   = list("mdch_any", "mdch_count", "mdch_severe", "MDCH flag", "food_insecure"))
 
 # Print to console
 cat("\nSimple DiD estimates:\n")
@@ -389,6 +410,93 @@ ext_did_csv <- bind_rows(lapply(names(ext_models), function(nm) {
 }))
 write.csv(ext_did_csv, file.path(TABLES_DIR, "table_adj_ext_did.csv"), row.names = FALSE)
 cat("  ✓ Extended (CASE + age) DiD table saved (CSV)\n")
+
+# ─────────────────────────────────────────────────────────────────────────────
+# STAGE 1B'': CASE EXACT-REPLICATION SPEC (diagnostic add-on, NOT a replacement
+# for Simple/Adjusted/Extended above)
+#
+# Stewart et al. (2025) equation (1): Y = a + l1*Scot + l2*Post + d*(Scot*Post)
+# + b*X + e, with year FE added in their "controls" column. Our Adjusted spec
+# above matches their controls+year-FE column on N, controls, and treatment
+# timing exactly, but omits a standalone `post` regressor -- we only ever
+# enter it via `tp` (treated*post), relying on YEAR_f to soak up everything
+# else. That's not fully redundant: YEAR_f is constant across an entire survey
+# year, but `post` has real sub-year variation within FYE2023 (the exact
+# 14-Nov-2022 cutoff), so CASE's model can separately estimate a common
+# (non-Scotland-specific) within-FYE2023 shift that ours currently cannot.
+#
+# This spec adds `post` explicitly -- y ~ treated + post + tp + X | YEAR_f --
+# nesting CASE's equation while keeping our extra year-FE flexibility, as a
+# check on how much of the CASE magnitude gap (-0.076 vs -0.085 on the MDCH
+# flag; -0.066 vs -0.088 on food insecurity, per their Table 3) that one
+# omission explains. Kept as a separate diagnostic table for now; fold into
+# (or swap for) the main Adjusted/Extended spec later once reviewed.
+# ─────────────────────────────────────────────────────────────────────────────
+cat("\n── Stage 1b'': CASE exact-replication spec (explicit Post term) ───────\n")
+
+make_case_fml <- function(outcome, covs = NULL) {
+  base <- paste(outcome, "~ treated + post + tp")
+  if (!is.null(covs) && length(covs) > 0)
+    base <- paste(base, "+", paste(covs, collapse = " + "))
+  as.formula(paste(base, "| YEAR_f"))
+}
+
+case_models <- lapply(simple_outcomes, function(spec) {
+  feols(
+    make_case_fml(spec$y, avail_covs),
+    data    = spec$data,
+    weights = ~GS_INDCH,
+    cluster = ~SERNUM,
+    notes   = FALSE
+  )
+})
+
+case_models_ok <- Filter(function(m) "tp" %in% names(coef(m)), case_models)
+if (length(case_models_ok) > 0) {
+  # No coef_map here, deliberately -- we want every coefficient printed
+  # (treated, post, tp, and all six controls), matching CASE's Table 3 layout,
+  # not just the DiD term as in the Simple/Adjusted/Extended tables above.
+  modelsummary(
+    case_models_ok,
+    stars    = c("*" = .1, "**" = .05, "***" = .01),
+    gof_map  = c("nobs", "r.squared"),
+    title    = "Table: CASE exact-replication spec (explicit Post term, all coefficients)",
+    output   = file.path(TABLES_DIR, "table_case_exact_did.tex")
+  )
+  cat("  ✓ CASE exact-replication table saved (LaTeX, full coefficients)\n\n")
+
+  cat("── Table 1b'': CASE exact-replication spec (full coefficients) ────────\n")
+  etable(case_models_ok,
+         se.below    = TRUE,
+         signif.code = c("***"=.01, "**"=.05, "*"=.1))
+} else {
+  cat("  ✗ tp dropped from ALL case_models — table not written\n")
+}
+
+cat("\nCASE exact-replication DiD estimates (tp only, for quick comparison):\n")
+for (nm in names(case_models)) {
+  cf  <- coef(case_models[[nm]])
+  sv  <- fixest::se(case_models[[nm]])
+  pv  <- fixest::pvalue(case_models[[nm]])
+  if (!DID_TERM %in% names(cf)) { cat(sprintf("  %-40s  [%s dropped]\n", nm, DID_TERM)); next }
+  sig <- ifelse(pv[DID_TERM] < .01, "***", ifelse(pv[DID_TERM] < .05, "**",
+               ifelse(pv[DID_TERM] < .1, "*", "")))
+  cat(sprintf("  %-40s  coef=%6.4f  SE=%6.4f  %s\n", nm, cf[DID_TERM], sv[DID_TERM], sig))
+}
+
+# Full-coefficient CSV (every term, not just tp) -- this is what the LaTeX
+# table-generation script (11_make_latex_tables.R) will read to reproduce a
+# CASE-Table-3-style layout with all covariates shown.
+case_exact_csv <- bind_rows(lapply(names(case_models_ok), function(nm) {
+  m  <- case_models_ok[[nm]]
+  cf <- coef(m); sv <- fixest::se(m); pv <- fixest::pvalue(m); ci <- confint(m)
+  data.frame(outcome = nm, term = names(cf), coef = as.numeric(cf),
+             se = as.numeric(sv), pval = as.numeric(pv),
+             ci_lo = ci[, 1], ci_hi = ci[, 2],
+             n_obs = nobs(m), r2 = r2(m, "r2"), row.names = NULL)
+}))
+write.csv(case_exact_csv, file.path(TABLES_DIR, "table_case_exact_did.csv"), row.names = FALSE)
+cat("  ✓ CASE exact-replication table saved (CSV, full coefficients)\n")
 
 # ─────────────────────────────────────────────────────────────────────────────
 # STAGE 1C: ITEM-LEVEL OLS DiD (one regression per MDCH item)

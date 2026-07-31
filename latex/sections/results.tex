@@ -1,0 +1,40 @@
+\section{Results}
+\label{sec:results}
+
+\subsection{Baseline difference-in-differences}
+\label{sec:res-baseline}
+
+Table~\ref{tab:stage1_composite} reports the baseline single-outcome estimates for the official MDCH flag, the three composite outcomes, and food insecurity, under the Simple, Adjusted and Extended specifications of Equation~\ref{eq:baseline-did}. The official MDCH flag falls by 6.2 percentage points under the Simple specification and by 7.6 percentage points once the six CASE controls are added --- the coefficient becomes \emph{more}, not less, significant on adjustment, even though the added controls explain noticeably less of the outcome variance than a richer, ad-hoc covariate set considered and rejected earlier in the project, which is a useful indication that the headline result is not an artefact of a kitchen-sink specification. Any deprivation and deprivation count both fall significantly under every specification (any deprivation: $-0.081$ to $-0.079$ percentage points; count: $-0.134$ to $-0.130$); severe deprivation shows no significant change under any specification. The Extended specification, which adds the child's own age on top of the CASE controls, barely moves any coefficient --- a useful robustness confirmation that the result is not sensitive to whether the child's own age is controlled for.
+
+\input{../tables/latex/stage1_composite.tex}
+
+Table~\ref{tab:stage1_case_exact} reports the exact replication of Stewart et al.'s (2025) own Table 3 specification, which includes an explicit \texttt{Post} main-effect term rather than absorbing it into year fixed effects, and reports the full covariate vector rather than only the treatment interaction. The Scotland$\times$Post coefficient of $-0.079$ for child material deprivation and $-0.068$ for food insecurity are both consistent in sign and magnitude with the corresponding Adjusted-specification estimates in Table~\ref{tab:stage1_composite}, and the covariate coefficients (young household head, female household head, ethnicity, disability, lone-parent status, family size) are all signed in the expected direction and highly significant, consistent with Stewart et al.'s own reported pattern.
+
+\input{../tables/latex/stage1_case_exact.tex}
+
+\subsection{Item-level baseline difference-in-differences}
+\label{sec:res-items}
+
+Table~\ref{tab:stage1_items} reports item-by-item estimates of Equation~\ref{eq:baseline-did} under the Adjusted specification, with Benjamini--Hochberg correction applied across the ten resulting tests. Only two items survive correction: Warm coat ($-0.007$, BH $p=0.010$) and Celebrations ($-0.025$, BH $p=0.010$). Bed/bedroom has the largest point estimate ($-0.102$) but does not survive even at the raw 10\% level, and is estimated on a substantially thinner sample (around 7,000 observations, versus 45,000 or more for most other items), since it is only asked under the old, pre-FYE2024 question wording. The remaining seven items are not significant at any level.
+
+\input{../tables/latex/stage1_items.tex}
+
+\subsection{Item-stacked difference-in-differences}
+\label{sec:res-stacked}
+
+\emph{[Pending: the item-stacked results, in \path{tables/latex/stage2_stacked.tex}, were generated from a results file that pre-dates the correction of five item display labels on 28 July 2026 --- the underlying item codes and coefficients are unaffected, but the printed item names for MDCH\_EQP, MDCH\_PLAY, MDCH\_TEA, MDCH\_TRP and MDCH\_VEG are currently wrong. This subsection will be completed once \path{04_stage2_item_did.R} and \path{11_make_latex_tables.R} have been rerun to regenerate the table with corrected labels.]}
+
+\subsection{Double/debiased machine learning difference-in-differences}
+\label{sec:res-dml}
+
+Table~\ref{tab:stage3_dml_composite}, introduced in Section~\ref{sec:dml}, allows the full specification ladder for the official MDCH flag to be assembled: OLS-simple ($-0.062$) $\rightarrow$ OLS-adjusted ($-0.076$) $\rightarrow$ DML-lean-lasso ($-0.035$, not significant) $\rightarrow$ DML-lean-random-forest ($-0.040$, $p<0.10$) $\rightarrow$ DML-wide-lasso ($-0.028$, not significant) $\rightarrow$ DML-wide-random-forest ($-0.045$, $p<0.05$). Every specification points in the same direction and at a broadly similar magnitude ($-0.028$ to $-0.076$); lasso is consistently the weakest cell at both covariate breadths, consistent with linear nuisance models understating the effect relative to random forest, while the two random-forest cells are close enough to each other that covariate breadth looks secondary to estimator flexibility here. OLS's adjustment step overstates the effect relative to every DML cell, suggesting the covariate-adjusted OLS estimate in Section~\ref{sec:res-baseline} partly reflects functional-form misspecification rather than the transfer's full causal effect. A lasso/random-forest ensemble estimated for the lean specification ($-0.041$, $p<0.10$) sits between the two individual lean-covariate methods, as expected.
+
+\subsection{Item-level and stacked machine-learning DiD}
+\label{sec:res-item-dml}
+
+\emph{[Pending, for the same reason as Section~\ref{sec:res-stacked}: the item-level DML results, in \path{tables/latex/stage4_dml_items.tex}, and the jointly estimated stacked DML results, in \path{tables/latex/stage5_stacked_ml.tex}, both carry the same pre-28-July item labels for MDCH\_EQP, MDCH\_PLAY, MDCH\_TEA, MDCH\_TRP and MDCH\_VEG. \path{07_stage4_dml_item.R} and \path{09_stage5_stacked_ml_did.R} already contain the corrected label mapping in their current form; only their output files need to be regenerated. Once corrected, the headline finding to report here is that zero of the ten items are Benjamini--Hochberg-significant under independent lasso, independent random forest, or the jointly estimated stacked model --- a null result that would then hold across three independent estimation strategies, in contrast to the two items that survive correction under baseline OLS (Section~\ref{sec:res-items}).]}
+
+\subsection{Falsification checks: Wales and Northern Ireland}
+\label{sec:res-placebo}
+
+As a falsification check on the Scotland--England design, the headline specification is re-estimated with Wales, and separately Northern Ireland, as the treated unit against England as control, using SCP's actual rollout date as a pseudo-treatment date; since neither nation received SCP, a null coefficient is the reassuring result. Wales passes cleanly on all four outcomes tested (official MDCH flag, any deprivation, deprivation count, severe deprivation), with coefficients close to zero and $p$-values between 0.26 and 0.98 in both the Simple and Adjusted specifications. Northern Ireland passes on three of the four outcomes (official MDCH flag, deprivation count, severe deprivation, all null), but shows a significant, positive coefficient on any deprivation specifically (Simple $0.086$, $p=0.035$; Adjusted $0.080$, $p=0.036$), indicating that measured deprivation rose in Northern Ireland relative to England around SCP's rollout date on this one composite. This coefficient is of the opposite sign to Scotland's own (negative) effect, so it does not mimic or contaminate the headline estimate; any deprivation is also the composite that shows the least conservative behaviour elsewhere in this dissertation (Section~\ref{sec:parallel-trends}), consistent with roughly one false positive being unsurprising across the 16 comparator$\times$outcome$\times$specification cells tested here. One candidate real-world explanation --- a change to Northern Ireland's own welfare "mitigations" scheme --- was checked and ruled out, since that scheme was extended, not curtailed, over this period. The cause of the Northern Ireland/any-deprivation anomaly is left as an open, flagged limitation rather than resolved. A formatted table for this check is not yet in \path{tables/latex/}; the coefficients above are taken from \path{tables/placebo_wales_ni.csv} and will be added once a corresponding \texttt{.tex} table is generated.

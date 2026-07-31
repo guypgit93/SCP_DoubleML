@@ -230,7 +230,13 @@ cat(sprintf("Official MDCH non-missing: %s (prevalence %.3f)\n",
 # =============================================================================
 # FOOD SECURITY
 # food_insecure = FOODSEC_STATUS_CAT==2 (official DWP category), restricted to
-# HHSHARE==1 per the variable guide. NAs (pre-2021/22, non-response) left as-is.
+# HHSHARE==1 per the variable guide. NAs left as-is (genuine non-response, plus
+# FOODSEC_STATUS_CAT is structurally unavailable before FYE2020 -- confirmed via
+# table(df$YEAR, !is.na(food_insecure)): FYE2017-2019 are 100% NA, FYE2020 is
+# ~100% observed (n=7,653), FYE2021 already excluded pipeline-wide (Covid), and
+# FYE2022-2024 are ~100% observed. So the food-insecurity DiD's pre-period is
+# effectively FYE2020 only, not FYE2017-2020 as for the other outcomes -- see
+# Methodology note on identification window before interpreting this estimate.
 # very_low_food_sec isn't derivable from this 2-category variable -> NA.
 # =============================================================================
 df <- df |>
