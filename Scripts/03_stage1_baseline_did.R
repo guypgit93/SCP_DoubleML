@@ -754,6 +754,96 @@ for (nm in names(rob_models)) {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
+# ROBUSTNESS: restrict sample to ages 6-15 (excludes Best Start overlap)
+#
+# Scotland also runs other child-targeted, Scotland-only transfers alongside
+# SCP -- most notably the Best Start Grant (pregnancy, age 2-3.5, age 4-5
+# instalments) and Best Start Foods (pregnancy to age 3, extended for
+# school-age children on free school meals) -- both age-gated to roughly
+# pregnancy through age 5-6 and both pre-dating SCP. The under-6 age band is
+# therefore where SCP's estimated effect is most likely entangled with these
+# other schemes, since a young child's household could be newly affected by
+# either. Children aged 6-15 were never Best-Start-eligible at any point in
+# the sample window and only became SCP-eligible at the November 2022
+# all-under-16 expansion, so restricting to this age band isolates SCP's own
+# contribution for the part of the sample where the two kinds of scheme
+# cannot overlap. Compare against the headline Adjusted-spec estimates above
+# (Stage 1b, `table_adj_did.csv`) on the same six CASE covariates.
+# ─────────────────────────────────────────────────────────────────────────────
+cat("\n── Robustness: age-restricted sample (6-15, excludes Best Start overlap) ──\n")
+
+age_outcomes <- list(
+  "Any deprivation (mdch_any)"     = list(data = df_mdch[AGE >= 6],      y = "mdch_any"),
+  "Deprivation count (mdch_count)" = list(data = df_mdch[AGE >= 6],      y = "mdch_count"),
+  "Severe deprivation"             = list(data = df_mdch[AGE >= 6],      y = "mdch_severe"),
+  "Official MDCH flag"             = list(data = df_mdch_flag[AGE >= 6], y = "MDCH"),
+  "Food insecurity"                = list(data = df_food[AGE >= 6],      y = "food_insecure")
+)
+
+cat("  Sample size, full vs. age-restricted (6-15):\n")
+for (nm in names(age_outcomes)) {
+  full_n <- nrow(simple_outcomes[[nm]]$data)
+  age_n  <- nrow(age_outcomes[[nm]]$data)
+  cat(sprintf("    %-32s  %s -> %s rows (%.1f%% retained)\n",
+              nm, format(full_n, big.mark = ","), format(age_n, big.mark = ","),
+              100 * age_n / full_n))
+}
+
+age_models <- lapply(age_outcomes, function(spec) {
+  feols(
+    make_did_fml(spec$y, avail_covs),
+    data    = spec$data,
+    weights = ~GS_INDCH,
+    cluster = ~SERNUM,
+    notes   = FALSE
+  )
+})
+
+age_models_ok <- Filter(function(m) "tp" %in% names(coef(m)), age_models)
+if (length(age_models_ok) > 0) {
+  modelsummary(
+    age_models_ok,
+    stars    = c("*" = .1, "**" = .05, "***" = .01),
+    coef_map = c("tp" = "DiD (Scotland x Post)"),
+    gof_map  = c("nobs", "r.squared"),
+    title    = "Table: Age-restricted (6-15) robustness check, Adjusted spec",
+    output   = file.path(TABLES_DIR, "table_age_restricted_did.tex")
+  )
+  cat("  ✓ Age-restricted DiD table saved (LaTeX)\n\n")
+
+  cat("── Table: Age-restricted (6-15) DiD, Adjusted spec ─────────────────────\n")
+  etable(age_models_ok,
+         keep_raw    = "^tp$",
+         se.below    = TRUE,
+         signif.code = c("***"=.01, "**"=.05, "*"=.1))
+} else {
+  cat("  ✗ tp dropped from ALL age_models — table not written; check collinearity above\n")
+}
+
+cat("\nAge-restricted (6-15) DiD estimates, Adjusted spec:\n")
+for (nm in names(age_models)) {
+  cf  <- coef(age_models[[nm]])
+  sv  <- fixest::se(age_models[[nm]])
+  pv  <- fixest::pvalue(age_models[[nm]])
+  if (!DID_TERM %in% names(cf)) { cat(sprintf("  %-40s  [%s dropped]\n", nm, DID_TERM)); next }
+  sig <- ifelse(pv[DID_TERM] < .01, "***", ifelse(pv[DID_TERM] < .05, "**",
+               ifelse(pv[DID_TERM] < .1, "*", "")))
+  cat(sprintf("  %-40s  coef=%6.4f  SE=%6.4f  %s\n", nm, cf[DID_TERM], sv[DID_TERM], sig))
+}
+
+# CSV companion, same format as table_adj_did.csv, for easy side-by-side
+# comparison against the full-sample Adjusted-spec estimates.
+age_did_csv <- bind_rows(lapply(names(age_models), function(nm) {
+  m <- age_models[[nm]]
+  cf <- coef(m); sv <- fixest::se(m); pv <- fixest::pvalue(m); ci <- confint(m)
+  if (!DID_TERM %in% names(cf)) return(NULL)
+  data.frame(outcome = nm, coef = cf[DID_TERM], se = sv[DID_TERM], pval = pv[DID_TERM],
+             ci_lo = ci[DID_TERM, 1], ci_hi = ci[DID_TERM, 2], n_obs = nobs(m), r2 = r2(m, "r2"))
+}))
+write.csv(age_did_csv, file.path(TABLES_DIR, "table_age_restricted_did.csv"), row.names = FALSE)
+cat("  ✓ Age-restricted DiD table saved (CSV)\n")
+
+# ─────────────────────────────────────────────────────────────────────────────
 # ROBUSTNESS: income/benefit covariates -- NOTE
 # The CASE (2025) replication spec (Stage 1b, above) never included income or
 # benefit-receipt covariates in the first place (see the COVARIATES section
