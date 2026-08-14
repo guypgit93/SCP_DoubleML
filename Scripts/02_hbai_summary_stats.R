@@ -139,7 +139,7 @@ t3 <- df_mdch |>
   group_by(group, period) |>
   summarise(
     `Any deprivation (%)` = mean(mdch_any,    na.rm = TRUE),
-    `Severe deprivation (≥3 items, %)`  = mean(mdch_severe, na.rm = TRUE),
+    `Severe deprivation (>5 items, %)`  = mean(mdch_severe, na.rm = TRUE),
     `Mean items lacking` = mean(mdch_count, na.rm = TRUE),
     N = sum(!is.na(mdch_any)),
     .groups = "drop"

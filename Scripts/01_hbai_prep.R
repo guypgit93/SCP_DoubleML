@@ -210,13 +210,19 @@ if (length(missing_items) > 0) cat(sprintf("  Missing: %s\n", paste(missing_item
 df <- df |> mutate(across(all_of(available_items), recode_mdch_item))
 
 # Approximate item-count severity measure (not the official DWP flag -- see MDCH below)
+# mdch_severe threshold changed 3 -> >5 (2026-08-14, revised same day from an initial
+# >=2): no fixed-count convention in the literature cleanly justifies a specific cut
+# (Nicoriciu & Elliot 2025 explicitly argue against arbitrary count thresholds), so this
+# is motivated instead by scaling Eurostat's official severe material deprivation
+# indicator (currently 7 of 13 items, ~54%) onto our 10-item scale (~5.4 items), rounded
+# to "more than five" (6+) as the closest whole-item cut.
 item_mat <- as.matrix(df[available_items])
 n_observed <- rowSums(!is.na(item_mat))
 df$mdch_count <- ifelse(n_observed == 0, NA_real_, rowSums(item_mat, na.rm = TRUE))
 df <- df |>
   mutate(
     mdch_any    = if_else(!is.na(mdch_count), as.numeric(mdch_count > 0), NA_real_),
-    mdch_severe = if_else(!is.na(mdch_count), as.numeric(mdch_count >= 3), NA_real_)
+    mdch_severe = if_else(!is.na(mdch_count), as.numeric(mdch_count > 5), NA_real_)
   )
 cat(sprintf("Approx mdch_count non-missing: %s (mdch_any prevalence %.3f)\n",
             format(sum(!is.na(df$mdch_count)), big.mark = ","), mean(df$mdch_any, na.rm = TRUE)))

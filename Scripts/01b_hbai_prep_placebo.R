@@ -145,7 +145,7 @@ df$mdch_count <- ifelse(n_observed == 0, NA_real_, rowSums(item_mat, na.rm = TRU
 df <- df |>
   mutate(
     mdch_any    = if_else(!is.na(mdch_count), as.numeric(mdch_count > 0), NA_real_),
-    mdch_severe = if_else(!is.na(mdch_count), as.numeric(mdch_count >= 3), NA_real_)
+    mdch_severe = if_else(!is.na(mdch_count), as.numeric(mdch_count > 5), NA_real_)
   )
 
 df <- df |> mutate(MDCH = if_else(MDCH %in% c(0, 1), MDCH, NA_real_))

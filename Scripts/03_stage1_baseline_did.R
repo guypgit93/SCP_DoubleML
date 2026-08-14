@@ -212,7 +212,6 @@ cat("\n── Stage 1a: Simple 2×2 DiD ─────────────�
 
 simple_outcomes <- list(
   "Any deprivation (mdch_any)"    = list(data = df_mdch,      y = "mdch_any"),
-  "Deprivation count (mdch_count)"= list(data = df_mdch,      y = "mdch_count"),
   "Severe deprivation"            = list(data = df_mdch,      y = "mdch_severe"),
   "Official MDCH flag"            = list(data = df_mdch_flag, y = "MDCH"),
   # Baseline-only, for comparability with Stewart et al. (CASE, 2025), who
@@ -250,7 +249,7 @@ etable(simple_models,
        keep_raw  = "^tp$",
        se.below  = TRUE,
        signif.code = c("***"=.01, "**"=.05, "*"=.1),
-       headers   = list("mdch_any", "mdch_count", "mdch_severe", "MDCH flag", "food_insecure"))
+       headers   = list("mdch_any", "mdch_severe", "MDCH flag", "food_insecure"))
 
 # Print to console
 cat("\nSimple DiD estimates:\n")
@@ -519,7 +518,8 @@ item_results <- lapply(avail_items, function(item) {
     coef      = coef(fit)[DID_TERM],
     se        = fixest::se(fit)[DID_TERM],
     pval      = fixest::pvalue(fit)[DID_TERM],
-    n         = nobs(fit)
+    n         = nobs(fit),
+    r2        = r2(fit, "r2")
   )
 }) |> bind_rows()
 
@@ -634,7 +634,6 @@ pretrend_wald <- function(fit, ref = REF_YEAR) {
 # Run event study for composite outcomes
 es_composite <- list(
   mdch_any   = run_event_study(df_mdch,      "mdch_any"),
-  mdch_count = run_event_study(df_mdch,      "mdch_count"),
   MDCH_flag  = run_event_study(df_mdch_flag, "MDCH")
 )
 
@@ -670,8 +669,6 @@ plot_event_study <- function(td, title, ylab = "DiD coefficient") {
 es_specs <- list(
   list(key = "mdch_any",   title = "Event Study: Any material deprivation (mdch_any)",
        ylab = "DiD estimate (proportion)"),
-  list(key = "mdch_count", title = "Event Study: Mean items lacking (mdch_count)",
-       ylab = "DiD estimate (no. items)"),
   list(key = "MDCH_flag",  title = "Event Study: Official DWP MDCH flag",
        ylab = "DiD estimate (proportion)")
 )
@@ -739,11 +736,11 @@ if (nrow(item_es) > 0) {
 cat("\n── Robustness: excluding FYE 2022 from pre-period ──────────────────────\n")
 
 df_rob      <- df_mdch[YEAR != 2022]
-rob_models  <- lapply(c("mdch_any", "mdch_count", "mdch_severe"), function(y) {
+rob_models  <- lapply(c("mdch_any", "mdch_severe"), function(y) {
   feols(make_did_fml(y, avail_covs), data = df_rob, weights = ~GS_INDCH,
         cluster = ~SERNUM, notes = FALSE)
 })
-names(rob_models) <- c("mdch_any", "mdch_count", "mdch_severe")
+names(rob_models) <- c("mdch_any", "mdch_severe")
 
 cat("Robustness estimates (FYE 2022 excluded from pre-period):\n")
 for (nm in names(rob_models)) {
@@ -774,7 +771,6 @@ cat("\n── Robustness: age-restricted sample (6-15, excludes Best Start overl
 
 age_outcomes <- list(
   "Any deprivation (mdch_any)"     = list(data = df_mdch[AGE >= 6],      y = "mdch_any"),
-  "Deprivation count (mdch_count)" = list(data = df_mdch[AGE >= 6],      y = "mdch_count"),
   "Severe deprivation"             = list(data = df_mdch[AGE >= 6],      y = "mdch_severe"),
   "Official MDCH flag"             = list(data = df_mdch_flag[AGE >= 6], y = "MDCH"),
   "Food insecurity"                = list(data = df_food[AGE >= 6],      y = "food_insecure")
@@ -875,13 +871,10 @@ cat("\n── Table: Simple vs Adjusted DiD — primary outcomes ─────
 etable(
   simple_models[["Any deprivation (mdch_any)"]],
   adj_models_ok[["Any deprivation (mdch_any)"]],
-  simple_models[["Deprivation count (mdch_count)"]],
-  adj_models_ok[["Deprivation count (mdch_count)"]],
   keep_raw    = "^tp$",
   se.below    = TRUE,
   signif.code = c("***"=.01, "**"=.05, "*"=.1),
-  headers     = list("mdch_any\n(simple)", "mdch_any\n(adjusted)",
-                     "mdch_count\n(simple)", "mdch_count\n(adjusted)")
+  headers     = list("mdch_any\n(simple)", "mdch_any\n(adjusted)")
 )
 
 cat("\n✓ All outputs saved to:\n")

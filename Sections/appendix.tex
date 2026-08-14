@@ -1,0 +1,57 @@
+\appendix
+\section{Appendix}
+\label{sec:appendix}
+
+This appendix reports supporting material too detailed for the main text: a background-characteristics robustness table, item-level and item-stacked decomposition tables, parallel-trends diagnostics for outcomes other than the official MDCH flag, the full age-restricted robustness check, and a data dictionary defining every variable used.
+
+\subsection{Background characteristics by pre-/post-SCP period}
+\label{sec:appendix-a1-period}
+
+Table~\ref{tab:summary_a1_by_period} decomposes the background characteristics reported in Table~\ref{tab:summary_background} (Section~\ref{sec:data}) by pre-/post-SCP period within each country (split at the November 2022 cutoff), replicating \citet{andersen2025}'s Table A1. The pre/post composition of each country's sample is broadly stable, with the exception of a rise in the disabled-household share in both countries and a fall in Scotland's household size in the post period.
+
+\input{Tables/summary_a1_by_period.tex}
+
+\subsection{Item-level and item-stacked tables}
+\label{sec:appendix-tables}
+
+Tables~\ref{tab:stage1_items} and~\ref{tab:stage2_stacked} report the full item-level and item-stacked baseline DiD decomposition discussed in Sections~\ref{sec:res-items}--\ref{sec:res-stacked}. Tables~\ref{tab:stage4_dml_items} and~\ref{tab:stage5_stacked_ml} report the corresponding item-level and jointly stacked machine-learning DiD results discussed in Section~\ref{sec:res-item-dml}.
+
+\input{Tables/stage1_items.tex}
+\input{Tables/stage2_stacked.tex}
+\input{Tables/stage4_dml_items.tex}
+\input{Tables/stage5_stacked_ml.tex}
+
+\subsection{Parallel-trends checks: composite outcomes and food insecurity}
+\label{sec:appendix-quarterly}
+
+Section~\ref{sec:parallel-trends} reports the official MDCH flag's parallel-trends diagnostic in the main text (Figure~\ref{fig:pt_composite}). This subsection reports the same diagnostic for the three composite outcomes and food insecurity, at both annual and quarterly granularity, the latter a finer-grained replication of the CASE evaluation's own event-study specification using rolling 13-week windows anchored on the SCP rollout date rather than annual survey-year dummies.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{Figures/pt_es_composite_grid.png}
+\caption{Scotland$\times$year event-study coefficients, annual granularity: official MDCH flag, the three composites, and food insecurity. Blue markers are pre-treatment years, red are post-treatment; vertical lines are 95\% confidence intervals; the dashed line marks the November 2022 rollout.}
+\label{fig:pt_composite_grid}
+\end{figure}
+
+\input{Tables/parallel_trends_quarterly_wald.tex}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=\textwidth]{Figures/pt_es_quarterly_composite_grid.png}
+\caption{Scotland$\times$quarter event-study coefficients, quarterly granularity: official MDCH flag, the three composites, and food insecurity. Blue markers are pre-treatment quarters, red are post-treatment; vertical lines are 95\% confidence intervals; the dashed line marks the November 2022 rollout.}
+\label{fig:pt_composite_quarterly}
+\end{figure}
+
+\subsection{Age-restricted robustness check}
+\label{sec:appendix-age-restricted}
+
+Section~\ref{sec:res-robustness} summarises the age-restricted (6--15) robustness check for the official MDCH flag in the main text. Table~\ref{tab:stage1_age_restricted} reports the full results across all five outcomes.
+
+\input{Tables/stage1_age_restricted.tex}
+
+\subsection{Data dictionary}
+\label{sec:appendix-data-dictionary}
+
+Tables~\ref{tab:data_dictionary_outcomes}--\ref{tab:data_dictionary_wide} define every variable used in this paper: the outcome, item, and treatment/design variables (Table~\ref{tab:data_dictionary_outcomes}); the six-variable lean covariate set replicating \citet{andersen2025} (Table~\ref{tab:data_dictionary_lean}); and the wider $\sim$35-variable set used only in the DML analysis (Section~\ref{sec:dml}; Table~\ref{tab:data_dictionary_wide}). All variables are drawn from the harmonised HBAI extract of the Family Resources Survey (DWP).
+
+\input{Tables/data_dictionary.tex}

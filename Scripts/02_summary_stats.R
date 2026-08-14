@@ -215,15 +215,23 @@ write_csv(table_a1, file.path(TABLES_DIR, "table_a1_by_period.csv"))
 # Key outcomes by group x period, same weighted sample as section 3.
 # "Severe deprivation" (>=3 of 10 MDCH_* items) is an approximate measure, not
 # an official DWP statistic -- MDCHDMP (official) only exists from 2023/24.
+#
+# Fixed 2026-08-04: "Any deprivation" was previously computed from MDCH (the
+# raw official DWP flag), not mdch_any (this paper's own "at least one of ten
+# items lacking" composite) -- the two are different variables and were
+# mislabelled as one. Now reports both, correctly: the official MDCH flag on
+# its own row, and mdch_any as "Any deprivation". "Mean age" dropped -- it is
+# a background characteristic, not an outcome (see background_characteristics
+# / table_a1_by_period instead).
 # =============================================================================
 summary_table <- df_mdch |>
   group_by(group, period) |>
   summarise(
-    N                    = n(),
-    `Any deprivation`    = round(weighted.mean(MDCH, GS_INDCH, na.rm = TRUE), 3),
-    `Severe deprivation` = round(weighted.mean(mdch_severe, GS_INDCH, na.rm = TRUE), 3),
-    `Food insecure`      = round(weighted.mean(food_insecure, GS_INDCH, na.rm = TRUE), 3),
-    `Mean age`           = round(weighted.mean(AGE, GS_INDCH, na.rm = TRUE), 1),
+    N                     = n(),
+    `Official MDCH flag`  = round(weighted.mean(MDCH, GS_INDCH, na.rm = TRUE), 3),
+    `Any deprivation`     = round(weighted.mean(mdch_any, GS_INDCH, na.rm = TRUE), 3),
+    `Severe deprivation`  = round(weighted.mean(mdch_severe, GS_INDCH, na.rm = TRUE), 3),
+    `Food insecure`       = round(weighted.mean(food_insecure, GS_INDCH, na.rm = TRUE), 3),
     .groups = "drop"
   )
 

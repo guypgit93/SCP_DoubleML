@@ -163,9 +163,9 @@ stage1_composite <- function() {
     caption = "Stage 1: baseline difference-in-differences, composite and official outcomes",
     label = "tab:stage1_composite",
     notes = paste(sig_note,
-      "Simple: no covariates. Adjusted: six CASE controls (Stewart et al., 2025). Extended: Adjusted plus child age.",
-      "Food insecurity is reported here for comparability with Stewart et al. (2025) only; it is not one of the ten MDCH items and is not carried into the item-level or DML decomposition in Stages 2--5.",
-      "The food-insecurity module is only observed in FRS from FYE2020 (FYE2017-2019 are structurally unavailable, not merely non-response), so this estimate is identified off a shorter pre-period (FYE2020 only, vs. FYE2017-2020 for the other outcomes) than the rest of the table; the resulting sample size closely matches Stewart et al.'s (2025) own food-insecurity analysis ($n=27{,}511$), consistent with the same underlying data constraint rather than a difference in sample construction. The quarterly pre-trend test for this outcome (Table~\\ref{tab:parallel_trends_quarterly_wald}) does not flag a violation.")
+      "Simple: no covariates. Adjusted: six CASE controls (Andersen et al., 2025). Extended: Adjusted plus child age.",
+      "Food insecurity is reported here for comparability with Andersen et al. (2025) only; it is not one of the ten MDCH items and is not carried into the item-level or DML decomposition in Stages 2--5.",
+      "The food-insecurity module is only observed in FRS from FYE2020 (FYE2017-2019 are structurally unavailable, not merely non-response), so this estimate is identified off a shorter pre-period (FYE2020 only, vs. FYE2017-2020 for the other outcomes) than the rest of the table; the resulting sample size closely matches Andersen et al.'s (2025) own food-insecurity analysis ($n=27{,}511$), consistent with the same underlying data constraint rather than a difference in sample construction. The quarterly pre-trend test for this outcome (Table~\\ref{tab:parallel_trends_quarterly_wald}) does not flag a violation.")
   )
 }
 
@@ -418,7 +418,7 @@ summary_background <- function() {
     body_lines = body,
     caption = "Sample background characteristics, England vs. Scotland (weighted by dependent-child weight, pooled across all years)",
     label = "tab:summary_background",
-    notes = "Weighted proportions (\\texttt{GS\\_INDCH}), replicating Table 2 of Stewart et al. (CASE, 2025). Cf. Table~\\ref{tab:summary_a1_by_period} for the same characteristics split by pre/post period."
+    notes = "Weighted proportions (\\texttt{GS\\_INDCH}), replicating Table 2 of Andersen et al. (CASE, 2025). Cf. Table~\\ref{tab:summary_a1_by_period} for the same characteristics split by pre/post period."
   )
 }
 
@@ -445,7 +445,7 @@ summary_a1_by_period <- function() {
     colspec = "l c c c c c c",
     header = header,
     body_lines = body,
-    caption = "Background characteristics by country and period, cf. Table A1 of Stewart et al. (CASE, 2025)",
+    caption = "Background characteristics by country and period, cf. Table A1 of Andersen et al. (CASE, 2025)",
     label = "tab:summary_a1_by_period",
     notes = "Weighted proportions (\\texttt{GS\\_INDCH}). Pre/Post split at the November 2022 SCP full-rollout cutoff.",
     wide = TRUE
@@ -487,7 +487,7 @@ summary_outcomes_table <- function() {
     if (length(v) == 0) return("--")
     fmt(v)
   }
-  outcomes <- c("Any deprivation", "Severe deprivation", "Food insecure", "Mean age")
+  outcomes <- c("Official MDCH flag", "Any deprivation", "Severe deprivation", "Food insecure")
   header <- "Outcome & England (Pre) & England (Post) & Scotland (Pre) & Scotland (Post)"
   body <- character(0)
   for (oc in outcomes) {
@@ -511,7 +511,7 @@ summary_outcomes_table <- function() {
     body_lines = body,
     caption = "Summary statistics: key outcomes by country and period (weighted means)",
     label = "tab:summary_outcomes",
-    notes = "Weighted by dependent-child weight (\\texttt{GS\\_INDCH}). Severe deprivation ($\\geq$3 of 10 MDCH items) is this dissertation's own approximate measure, not an official DWP statistic; \\texttt{MDCHDMP} (official deep material poverty) only exists from FYE2024."
+    notes = "Weighted by dependent-child weight (\\texttt{GS\\_INDCH}). Official MDCH flag is DWP's own scored measure (Section~\\ref{sec:data}); any deprivation ($\\geq$1 of 10 items) and severe deprivation ($\\geq$3 of 10 items) are this paper's own composites, not official DWP statistics; \\texttt{MDCHDMP} (official deep material poverty) only exists from FYE2024."
   )
 }
 
@@ -524,7 +524,7 @@ summary_outcomes_table <- function() {
 #
 # Term labels below, esp. the ETH_f2-5 -> Mixed/Asian/Black/Other mapping,
 # were NOT taken from a codebook (none was available) -- they were confirmed
-# empirically by matching this spec's coefficients against Stewart et al.'s
+# empirically by matching this spec's coefficients against Andersen et al.'s
 # (2025) own published Table 3 values, which line up closely for every
 # ethnicity category on both outcomes (e.g. ETH_f4 = 0.178 here vs their
 # Black = 0.178 on the MDCH flag; 0.086 here vs their 0.087 on food
@@ -592,10 +592,65 @@ stage1_case_exact <- function() {
     colspec = "l c c",
     header = header,
     body_lines = body,
-    caption = "Stage 1: CASE exact-replication spec (explicit Post term), all coefficients, cf. Table 3 of Stewart et al. (2025)",
+    caption = "Stage 1: CASE exact-replication spec (explicit Post term), all coefficients, cf. Table 3 of Andersen et al. (2025)",
     label = "tab:stage1_case_exact",
     notes = paste(sig_note,
-      "Diagnostic robustness spec, not the headline Adjusted/Extended results reported elsewhere -- adds an explicit \\texttt{post} term alongside \\texttt{treated}, \\texttt{tp}, the six CASE controls, and year fixed effects, nesting Stewart et al.'s (2025) equation (1). Ethnicity category labels (Mixed/Asian/Black/Other, ref.\\ White) were confirmed empirically against Stewart et al.'s own Table 3 coefficients, not a codebook. Stewart et al.\\ use a stricter significance convention ($^{*}p<0.05$, $^{**}p<0.01$, $^{***}p<0.001$) than the $p<0.10/0.05/0.01$ used throughout this table and elsewhere in this dissertation -- do not compare star counts directly across the two.")
+      "Diagnostic robustness spec, not the headline Adjusted/Extended results reported elsewhere -- adds an explicit \\texttt{post} term alongside \\texttt{treated}, \\texttt{tp}, the six CASE controls, and year fixed effects, nesting Andersen et al.'s (2025) equation (1). Ethnicity category labels (Mixed/Asian/Black/Other, ref.\\ White) were confirmed empirically against Andersen et al.'s own Table 3 coefficients, not a codebook. Andersen et al.\\ use a stricter significance convention ($^{*}p<0.05$, $^{**}p<0.01$, $^{***}p<0.001$) than the $p<0.10/0.05/0.01$ used throughout this table and elsewhere in this paper -- do not compare star counts directly across the two.")
+  )
+}
+
+# ── Falsification check: Wales / Northern Ireland as pseudo-treated ────────
+#
+# Source: 10_placebo_wales_ni.R -> placebo_wales_ni.csv. Wales and Northern
+# Ireland substituted in turn for Scotland as the "treated" unit against
+# England as control, using SCP's actual rollout date as the pseudo-treatment
+# date; neither nation received SCP, so a null coefficient is the expected,
+# reassuring result. CSV has one row per outcome x pseudo_treated x spec
+# (4 outcomes x 2 countries x 2 specs = 16 rows); reshaped here into one row
+# per outcome, four columns (Wales/NI x Simple/Adjusted), matching the
+# Outcome-row layout used throughout Stage 1's tables.
+
+placebo_wales_ni <- function() {
+  path <- file.path(TABLES_DIR, "placebo_wales_ni.csv")
+  if (!file.exists(path)) { cat("  ⚠ placebo_wales_ni.csv not found in tables/ -- skipping.\n"); return(invisible(NULL)) }
+  d <- read.csv(path)
+
+  outcomes <- unique(d$outcome)
+  header <- "Outcome & Wales: Simple & Wales: Adjusted & NI: Simple & NI: Adjusted"
+  cell <- function(oc, country, sp) {
+    r <- d[d$outcome == oc & d$pseudo_treated == country & d$spec == sp, ]
+    if (nrow(r) != 1) return(list(coef = "--", se = ""))
+    list(coef = fmt(r$coef) %+% stars(r$pval), se = paste0("(", fmt(r$se), ")"))
+  }
+  body <- character(0)
+  for (oc in outcomes) {
+    ws <- cell(oc, "Wales", "Simple");    wa <- cell(oc, "Wales", "Adjusted (CASE)")
+    ns <- cell(oc, "NI",    "Simple");    na <- cell(oc, "NI",    "Adjusted (CASE)")
+    row1 <- paste(esc(oc), ws$coef, wa$coef, ns$coef, na$coef, sep = " & ")
+    row2 <- paste("",      ws$se,   wa$se,   ns$se,   na$se,   sep = " & ")
+    body <- c(body, paste0(row1, " \\\\"), paste0(row2, " \\\\"))
+  }
+  n_wales <- unique(d$n_treated[d$pseudo_treated == "Wales"])[1]
+  n_ni    <- unique(d$n_treated[d$pseudo_treated == "NI"])[1]
+  n_eng   <- unique(d$n_control)[1]
+  body <- c(body, "\\midrule",
+            paste("N (pseudo-treated)",
+                  format(n_wales, big.mark = ","), format(n_wales, big.mark = ","),
+                  format(n_ni, big.mark = ","), format(n_ni, big.mark = ","), sep = " & ") %+% " \\\\",
+            paste("N (England, control)",
+                  format(n_eng, big.mark = ","), format(n_eng, big.mark = ","),
+                  format(n_eng, big.mark = ","), format(n_eng, big.mark = ","), sep = " & ") %+% " \\\\")
+
+  write_tex_table(
+    file.path(OUT_DIR, "placebo_wales_ni.tex"),
+    colspec = "l c c c c",
+    header = header,
+    body_lines = body,
+    caption = "Falsification check: Wales and Northern Ireland as pseudo-treated units against England",
+    label = "tab:placebo_wales_ni",
+    notes = paste(sig_note,
+      "Wales and Northern Ireland substituted in turn for Scotland as the treated unit, England retained as control, at SCP's actual rollout date (14 November 2022); neither nation received SCP, so a null coefficient is the expected result.",
+      "Adjusted specification uses the same six CASE controls as Table~\\ref{tab:stage1_composite}.")
   )
 }
 
@@ -614,4 +669,5 @@ cat("Summary stats (background)...\n");    summary_background()
 cat("Summary stats (Table A1)...\n");      summary_a1_by_period()
 cat("Summary stats (sample composition)...\n"); summary_sample_composition()
 cat("Summary stats (outcomes)...\n");      summary_outcomes_table()
+cat("Falsification check (Wales/NI)...\n"); placebo_wales_ni()
 cat("\nDone. \\input{tables/latex/<name>.tex} each file directly into the Overleaf paper.\n")

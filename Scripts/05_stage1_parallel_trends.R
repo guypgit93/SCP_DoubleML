@@ -389,8 +389,7 @@ cat("\n== TABLE A3: Parallel outcome trends test (event study) =================
 
 outcome_specs <- list(
   list(key = "mdch_any",      label = "MDCH: Any deprivation",   data = df_mdch,      y = "mdch_any"),
-  list(key = "mdch_count",    label = "MDCH: Count of items",    data = df_mdch,      y = "mdch_count"),
-  list(key = "mdch_severe",   label = "MDCH: Severe (3+ items)", data = df_mdch,      y = "mdch_severe"),
+  list(key = "mdch_severe",   label = "MDCH: Severe (>5 items)", data = df_mdch,      y = "mdch_severe"),
   list(key = "MDCH_flag",     label = "MDCH: Official DWP flag", data = df_mdch_flag, y = "MDCH"),
   list(key = "food_insecure", label = "Food insecurity",         data = df_food,      y = "food_insecure")
 )
@@ -399,7 +398,7 @@ for (item in avail_items) {
     key = item, label = unname(MDCH_LABELS[item]), data = df_mdch, y = item
   )
 }
-composite_keys <- c("mdch_any", "mdch_count", "mdch_severe", "MDCH_flag", "food_insecure")
+composite_keys <- c("mdch_any", "mdch_severe", "MDCH_flag", "food_insecure")
 
 a3_results <- map(outcome_specs, function(spec) {
   # Reference year must exist in this outcome's own subsample (food_insecure

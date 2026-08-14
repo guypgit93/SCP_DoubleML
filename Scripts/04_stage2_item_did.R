@@ -149,7 +149,8 @@ extract_row <- function(fit, coefname, label, spec) {
   crit <- qnorm(1 - ALPHA / 2)
   data.frame(model = "Pooled", item = NA_character_, label = label, spec = spec,
              coef = est, se = se, pval = pval,
-             ci_lo = est - crit * se, ci_hi = est + crit * se)
+             ci_lo = est - crit * se, ci_hi = est + crit * se,
+             r2 = r2(fit, "r2"))
 }
 
 pooled_results <- bind_rows(
@@ -189,7 +190,8 @@ extract_item_rows <- function(fit, spec) {
     print(rn)
     return(NULL)
   }
-  crit <- qnorm(1 - ALPHA / 2)
+  crit  <- qnorm(1 - ALPHA / 2)
+  fit_r2 <- r2(fit, "r2")  # one value for the whole joint model -- same for every item row in this spec
   out <- lapply(item_rows, function(rname) {
     item_code <- sub("^tp:item_f", "", rname)
     est  <- ct[rname, "Estimate"]
@@ -198,7 +200,8 @@ extract_item_rows <- function(fit, spec) {
     data.frame(model = "Item-interacted", item = item_code,
                label = unname(MDCH_LABELS[item_code]), spec = spec,
                coef = est, se = se, pval = pval,
-               ci_lo = est - crit * se, ci_hi = est + crit * se)
+               ci_lo = est - crit * se, ci_hi = est + crit * se,
+               r2 = fit_r2)
   })
   bind_rows(out)
 }
@@ -261,7 +264,7 @@ write.csv(all_results, file.path(TABLES_DIR, "stacked_item_did.csv"), row.names 
 cat("\n✓ Stacked item-level DiD outputs saved to:\n")
 cat(sprintf("  Table:  %s\n", file.path(TABLES_DIR, "stacked_item_did.csv")))
 cat(sprintf("  Figure: %s\n", file.path(FIGURES_DIR, "stacked_item_coefplot.png")))
-cat("\nCompare pooled coefficient here against Stage 1's mdch_count and mdch_any\n")
+cat("\nCompare pooled coefficient here against Stage 1's mdch_any and mdch_severe\n")
 cat("(03_stage1_baseline_did.R), and compare item-interacted coefficients here\n")
 cat("against Stage 3's 10-separate-regression DR-DiD item table (04_dml_did.R)\n")
 cat("as a triangulation check.\n")

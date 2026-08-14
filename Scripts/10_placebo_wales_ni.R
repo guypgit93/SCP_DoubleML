@@ -100,7 +100,6 @@ make_did_fml <- function(outcome, covs = NULL) {
 outcomes <- list(
   "Official MDCH flag"             = list(data = df_mdch_flag, y = "MDCH"),
   "Any deprivation (mdch_any)"     = list(data = df_mdch,      y = "mdch_any"),
-  "Mean items lacking (mdch_count)"= list(data = df_mdch,      y = "mdch_count"),
   "Severe deprivation (mdch_severe)"= list(data = df_mdch,     y = "mdch_severe")
 )
 
@@ -113,7 +112,7 @@ pseudo_treated <- list(
 CONTROL_CODE <- 1  # England
 
 # ─────────────────────────────────────────────────────────────────────────────
-# RUN: {Wales, NI} vs England, each of the 4 outcomes, Simple + Adjusted,
+# RUN: {Wales, NI} vs England, each of the 3 outcomes, Simple + Adjusted,
 # using SCP's actual `post` timing as the pseudo-treatment date.
 # ─────────────────────────────────────────────────────────────────────────────
 extract_row <- function(fit, outcome_label, pseudo_name, spec, n_treat, n_ctrl) {
@@ -124,7 +123,8 @@ extract_row <- function(fit, outcome_label, pseudo_name, spec, n_treat, n_ctrl) 
   data.frame(outcome = outcome_label, pseudo_treated = pseudo_name, spec = spec,
              n_treated = n_treat, n_control = n_ctrl,
              coef = est, se = se, pval = pval,
-             ci_lo = est - crit * se, ci_hi = est + crit * se)
+             ci_lo = est - crit * se, ci_hi = est + crit * se,
+             r2 = r2(fit, "r2"))
 }
 
 all_results <- list()
