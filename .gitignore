@@ -38,6 +38,7 @@ venv/
 *.jpeg
 *.md
 *.txt
+*.bib
 config.py
 Papers/
 figures/
