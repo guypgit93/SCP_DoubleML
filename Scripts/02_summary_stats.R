@@ -1,7 +1,7 @@
 # =============================================================================
 # 02_summary_stats.R
 # Descriptive summary stats comparing Scotland vs England samples, following
-# the sample definition and weighting of Table 2 in Stewart et al. (CASE 2025).
+# the sample definition and weighting of Table 2 in Andersen et al. (CASE 2025).
 # No regressions -- descriptive tables only.
 #
 # Reads:  hbai_clean.csv        (produced by 01_hbai_prep.R)
@@ -75,7 +75,7 @@ write_csv(sample_composition, file.path(TABLES_DIR, "sample_composition.csv"))
 # =============================================================================
 # ANALYTIC SAMPLE for sections 3-5
 # Restricted to children with a valid MDCH flag and weighted by GS_INDCH
-# (dependent child weight), following Stewart et al. (CASE 2025) Table 2 note
+# (dependent child weight), following Andersen et al. (CASE 2025) Table 2 note
 # (ii). food_insecure only starts 2021/22, so it's missing more than MDCH.
 # =============================================================================
 df_mdch <- df |>
@@ -99,7 +99,7 @@ print(table(df_mdch$food_insecure, useNA = "ifany"))
 
 # =============================================================================
 # BACKGROUND CHARACTERISTICS BY GROUP (balance table)
-# Reproduces Table 2 in Stewart et al. (CASE 2025): compares Scotland vs
+# Reproduces Table 2 in Andersen et al. (CASE 2025): compares Scotland vs
 # England on observables, pooled across all years.
 #   MDCH             1 = "In child material deprivation" (official DWP flag)
 #   NUMBKIDS         ==3 = "three or more children"           -> larger family
@@ -156,7 +156,7 @@ write_csv(background_table, file.path(TABLES_DIR, "background_characteristics.cs
 
 # =============================================================================
 # TABLE A1: same characteristics, split by group x period (All/Pre/Post)
-# Reproduces Table A1 in Stewart et al. (CASE 2025). Same variables/codes as
+# Reproduces Table A1 in Andersen et al. (CASE 2025). Same variables/codes as
 # section 3 above.
 # =============================================================================
 

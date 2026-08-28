@@ -46,7 +46,7 @@ cat(sprintf("  %s rows | countries: %s | years: %s\n",
             paste(sort(unique(df$country_f)), collapse = ", "),
             paste(sort(unique(df$YEAR)), collapse = ", ")))
 
-# ── CASE (Stewart et al. 2025) covariates -- identical construction to ─────
+# ── CASE (Andersen et al. 2025) covariates -- identical construction to ────
 # 03_stage1_baseline_did.R, so this placebo comparison varies only the
 # pseudo-treated country, not the spec.
 df[, young_head          := as.numeric(AGEHDBAND == 1)]

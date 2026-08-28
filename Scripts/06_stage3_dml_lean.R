@@ -2,7 +2,7 @@
 # 06_stage3_dml_lean.R
 # Stage 3 (Guy's 2026-07-17 narrative): Double/debiased ML DiD for repeated
 # cross-sections, single outcome. PRIMARY OUTCOME = official DWP MDCH flag
-# ("MDCH"), matching Stage 2's baseline (replicates the CASE/Stewart et al.
+# ("MDCH"), matching Stage 2's baseline (replicates the CASE/Andersen et al.
 # paper using the official flag) so Stage 3 is testing sensitivity to
 # covariate adjustment/functional form on the SAME outcome, not a different
 # one. mdch_any (the earlier target) stays available as a secondary/
@@ -107,7 +107,7 @@ cat(sprintf("  treated: Scotland=%s  England=%s | post: pre=%s  post=%s\n",
             sum(df_mdch$post == 0), sum(df_mdch$post == 1)))
 
 # ─────────────────────────────────────────────────────────────────────────────
-# COVARIATES -- CASE (Stewart et al. 2025) paper's actual six controls
+# COVARIATES -- CASE (Andersen et al. 2025) paper's actual six controls
 # (footnote iii): head aged under 25, female head, ethnicity (five
 # categories), disabled household, lone parent, large family (3+ kids). Same
 # construction as 03_stage1_baseline_did.R's CASE_COVS and
@@ -244,7 +244,7 @@ if (length(results) > 0) {
 
   cat("\nCompare these ATET estimates against:\n")
   cat("  - OLS baseline, official MDCH flag (03_stage1_baseline_did.R) -- this is Stage 2's\n")
-  cat("    replication of the CASE/Stewart et al. paper. Stage 3's job is testing whether\n")
+  cat("    replication of the CASE/Andersen et al. paper. Stage 3's job is testing whether\n")
   cat("    THAT number is sensitive to covariate adjustment/functional form, so compare\n")
   cat("    against it directly, not against 04_dml_did.R's att_gt()-based numbers (not\n")
   cat("    part of the write-up per Guy's 2026-07-17 decision).\n")

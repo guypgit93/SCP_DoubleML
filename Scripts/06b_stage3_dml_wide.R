@@ -11,7 +11,7 @@
 # only as the technical reason DML tolerates a wide X where att_gt() didn't.
 #
 # PRIMARY OUTCOME = official DWP MDCH flag ("MDCH"), matching Stage 2's
-# baseline (CASE/Stewart et al. replication). mdch_any results already
+# baseline (CASE/Andersen et al. replication). mdch_any results already
 # obtained (lasso -0.0955***, randomforest -0.0626 n.s.) stay valid as a
 # secondary/robustness outcome, just not primary going forward. See
 # 06_stage3_dml_lean.R's header for the interesting lasso-vs-RF reversal
@@ -260,7 +260,7 @@ if (length(results) > 0) {
   cat(sprintf("\nwrote %s\n", file.path(TABLES_DIR, "dml_did_wide_covariates_MDCH.csv")))
 
   cat("\nCompare against 03_stage1_baseline_did.R's OLS baseline for the official MDCH flag\n")
-  cat("(Stage 2 -- the CASE/Stewart et al. replication). That comparison is what Stage 3\n")
+  cat("(Stage 2 -- the CASE/Andersen et al. replication). That comparison is what Stage 3\n")
   cat("is actually testing: is the baseline sensitive to covariate adjustment/functional form.\n")
   cat("If the wide-set estimates move meaningfully (especially lasso, which does its own\n")
   cat("variable selection via regularization), that's evidence the richer covariate set is\n")

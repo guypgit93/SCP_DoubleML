@@ -197,7 +197,7 @@ TABLE_A2_VARS <- c(
   white_hh    = "White households"
 )
 
-# Adjusted-column controls for Table A3 -- CASE (Stewart et al. 2025) paper's
+# Adjusted-column controls for Table A3 -- CASE (Andersen et al. 2025) paper's
 # actual six controls (footnote iii), identical construction to
 # 03_stage1_baseline_did.R's CASE_COVS / 04_stage2_item_did.R /
 # 06_stage3_dml_lean.R. Reuses the dummies already built above for Table A2

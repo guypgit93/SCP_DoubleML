@@ -10,7 +10,7 @@
 # sessions/scripts and aren't practical to refit in one place). Source of
 # each:
 #   OLS simple      -- 03_stage1_baseline_did.R, Table 1a (etable), MDCH column
-#   OLS adjusted     -- 03_stage1_baseline_did.R, Table 1b (Stewart 2025 replication)
+#   OLS adjusted     -- 03_stage1_baseline_did.R, Table 1b (Andersen et al. 2025 replication)
 #   DML lean-lasso   -- 06_stage3_dml_lean.R, lean covariates (7), MDCH
 #   DML lean-RF      -- 06_stage3_dml_lean.R, lean covariates (7), MDCH
 #   DML wide-lasso   -- 06b_stage3_dml_wide.R, wide covariates (47), MDCH
@@ -38,7 +38,7 @@ crit  <- qnorm(1 - ALPHA / 2)
 spec_ladder <- tribble(
   ~step, ~spec,                     ~method,  ~covset,  ~coef,    ~se,      ~pval,
   1,     "OLS, simple",             "OLS",    "none",   -0.0616,  0.0241,   NA_real_,
-  2,     "OLS, adjusted (Stewart)", "OLS",    "lean",   -0.0609,  0.0268,   NA_real_,
+  2,     "OLS, adjusted (Andersen)", "OLS",    "lean",   -0.0609,  0.0268,   NA_real_,
   3,     "DML, lean, lasso",        "lasso",  "lean",   -0.0119,  0.0209,   0.5696,
   4,     "DML, lean, random forest","RF",     "lean",   -0.0347,  0.0216,   0.1091,
   5,     "DML, wide, lasso",        "lasso",  "wide",   -0.0282,  0.0202,   0.1643,
@@ -51,7 +51,7 @@ spec_ladder <- tribble(
     # are exact as reported by didDML().
     pval = ifelse(is.na(pval), NA_real_, pval),
     sig  = case_when(
-      spec %in% c("OLS, simple", "OLS, adjusted (Stewart)") ~ "**",
+      spec %in% c("OLS, simple", "OLS, adjusted (Andersen)") ~ "**",
       pval < .01 ~ "***", pval < .05 ~ "**", pval < .1 ~ "*", TRUE ~ ""
     ),
     ci_lo = coef - crit * se,

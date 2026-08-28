@@ -3,9 +3,7 @@
 # Stacked item-level DiD: pools the 10 MDCH items into ONE regression
 # (long format, item + year FE, clustered at household) instead of 10
 # separate ones, so SEs correctly account for within-child correlation
-# across items (Moulton problem). Same 2023-cutoff treatment definition as
-# 03_stage1_baseline_did.R -- this is a clustering fix, not a timing fix (that's
-# 04c_agecohort_staggered_did.R).
+# across items (Moulton problem).
 #
 # Two specs:
 #   (a) Pooled:          item_value ~ treated + tp | YEAR_f + item_f
@@ -33,15 +31,13 @@ dir.create(FIGURES_DIR, showWarnings = FALSE, recursive = TRUE)
 
 ALPHA           <- 0.05
 SCP_EXPAND_YEAR <- 2023
-CLUSTERVAR      <- "SERNUM"   # household -- consistent with 03/04/05 scripts
+# All feols() calls below cluster at SERNUM (household) directly, consistent
+# with 03/05.
 
 MDCH_ITEMS <- c("MDCH_BED", "MDCH_CEL", "MDCH_COAT", "MDCH_EQP", "MDCH_HOL",
                 "MDCH_PLAY", "MDCH_PLY", "MDCH_TEA", "MDCH_TRP", "MDCH_VEG")
 
 MDCH_LABELS <- c(
-  # Labels corrected 2026-07-28 against the official HBAI item wording (see
-  # 03_stage1_baseline_did.R's header for the full rationale) -- MDCH_TEA,
-  # MDCH_EQP and MDCH_PLAY were factually wrong, not just imprecise.
   MDCH_BED  = "Bed / bedroom",
   MDCH_CEL  = "Celebrations",
   MDCH_COAT = "Warm coat",
@@ -81,14 +77,7 @@ cat(sprintf("  %s rows | years: %s\n",
             paste(sort(unique(df$YEAR)), collapse = ", ")))
 
 # ─────────────────────────────────────────────────────────────────────────────
-# COVARIATE SET (Adjusted spec) -- CASE (Stewart et al. 2025) paper's actual
-# six controls (footnote iii): head aged under 25, female head, ethnicity
-# (five categories), disabled household, lone parent, large family (3+ kids).
-# Same construction as 03_stage1_baseline_did.R's CASE_COVS, kept identical
-# so the composite (03) and item-stacked (04) OLS results are directly
-# comparable on covariates, not just on outcome. NOT income/benefit-receipt/
-# housing -- see 03's COVARIATES section header for the mediator/bad-control
-# rationale for excluding those.
+# COVARIATE SET (Adjusted spec) -- CASE's six controls (Andersen et al. 2025)
 # ─────────────────────────────────────────────────────────────────────────────
 df[, young_head          := as.numeric(AGEHDBAND == 1)]
 df[, female_head         := as.numeric(SEXHD == 2)]
@@ -105,9 +94,7 @@ cat(sprintf("  Adjusted-spec covariates (CASE 2025 controls): %s\n", paste(CASE_
 
 # ─────────────────────────────────────────────────────────────────────────────
 # RESHAPE WIDE -> LONG (one row per child-year-item)
-# Subset to only the columns actually needed BEFORE reshaping -- reshaping
-# with all ~90 pipeline columns as id.vars would needlessly 10x the memory
-# footprint for no benefit here.
+# Subset to only the columns actually needed before reshaping
 # ─────────────────────────────────────────────────────────────────────────────
 id_cols  <- c("SERNUM", "YEAR", "YEAR_f", "treated", "post", "tp", "GS_INDCH", CASE_COVS)
 id_cols  <- id_cols[id_cols %in% names(df)]
@@ -266,5 +253,5 @@ cat(sprintf("  Table:  %s\n", file.path(TABLES_DIR, "stacked_item_did.csv")))
 cat(sprintf("  Figure: %s\n", file.path(FIGURES_DIR, "stacked_item_coefplot.png")))
 cat("\nCompare pooled coefficient here against Stage 1's mdch_any and mdch_severe\n")
 cat("(03_stage1_baseline_did.R), and compare item-interacted coefficients here\n")
-cat("against Stage 3's 10-separate-regression DR-DiD item table (04_dml_did.R)\n")
-cat("as a triangulation check.\n")
+cat("against the item-level DML table (07_stage4_dml_item.R) as a triangulation\n")
+cat("check.\n")

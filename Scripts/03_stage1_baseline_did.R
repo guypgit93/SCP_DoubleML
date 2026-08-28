@@ -1,6 +1,6 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # 03_stage1_baseline_did.R
-# Stage 1: OLS DiD Replication of Stewart (2025) / CASE Paper
+# Stage 1: OLS DiD Replication of Andersen et al. (2025) / CASE Paper
 # Scottish Child Payment → Child Material Deprivation
 # ─────────────────────────────────────────────────────────────────────────────
 #
@@ -108,7 +108,7 @@ cat(sprintf("  Sample: %s rows, years: %s\n",
 
 # ─────────────────────────────────────────────────────────────────────────────
 # COVARIATES
-# CASE's six controls (Stewart et al. 2025, footnote iii): young head (<25),
+# CASE's six controls (Andersen et al. 2025, footnote iii): young head (<25),
 # female head, ethnicity, disability, lone parent, large family (3+ kids).
 # No income/benefits/housing -- those respond to SCP itself, so they're bad
 # controls here. Same six vars as the balance table in 02_summary_stats.R.
@@ -227,10 +227,10 @@ write_did_csv(simple_models, file.path(TABLES_DIR, "table_simple_did.csv"))
 cat("  ✓ Simple DiD table saved (CSV)\n")
 
 # ─────────────────────────────────────────────────────────────────────────────
-# STAGE 1B: COVARIATE-ADJUSTED DiD (replication of Stewart 2025)
-# Adds demographic, income, and housing controls + year FEs
+# STAGE 1B: COVARIATE-ADJUSTED DiD (replication of Andersen et al. 2025)
+# Adds the six CASE covariates (see COVARIATES above) + year FEs
 # ─────────────────────────────────────────────────────────────────────────────
-cat("\n── Stage 1b: Covariate-adjusted DiD (Stewart replication) ─────────────\n")
+cat("\n── Stage 1b: Covariate-adjusted DiD (Andersen et al. replication) ──────\n")
 
 # Available covariates (drop any not in dataset)
 avail_covs <- OLS_COVS[OLS_COVS %in% names(df)]
@@ -252,7 +252,7 @@ if (length(adj_models_ok) > 0) {
     stars    = c("*" = .1, "**" = .05, "***" = .01),
     coef_map = c("tp" = "DiD (Scotland x Post)"),
     gof_map  = c("nobs", "r.squared"),
-    title    = "Table: Covariate-adjusted DiD (Stewart 2025 replication)",
+    title    = "Table: Covariate-adjusted DiD (Andersen et al. 2025 replication)",
     output   = file.path(TABLES_DIR, "table_adj_did.tex")
   )
   cat("  ✓ Adjusted DiD table saved (LaTeX)\n\n")
