@@ -8,8 +8,7 @@
 #                             (03, 04, 05, 05b, 05c, 06, 06b, 07, 08, 09, 12,
 #                             13) reads this one.
 #   - hbai_clean_placebo.csv  all four UK nations. Only 10_placebo_wales_ni.R
-#                             reads this -- it's the Wales/NI falsification
-#                             check, which needs Wales and NI in the data.
+#                             reads this
 #
 # Key choices:
 #   - Scotland/England/Wales/NI defined via COUNTRY (1/2/3/4).
@@ -21,8 +20,6 @@
 #     exact 14 Nov 2022 SCP post cutoff and (b) add CASE-style rolling
 #     13-week quarter bins (Andersen, Nesom, Patrick, Pinter, Stewart &
 #     Tominey 2025, CASE paper 238, Table A3) for 05c.
-#
-# Requires: tidyverse
 # =============================================================================
 
 library(tidyverse)
