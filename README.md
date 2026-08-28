@@ -8,7 +8,7 @@ All analysis uses the **harmonised Households Below Average Income (HBAI) extrac
 
 - Raw HBAI `.tab` files (FYE2016–FYE2024, 2023/24 prices): obtained from UKDS study 5828.
 - Raw FRS household-level files (for exact interview dates, used to refine the SCP post-treatment cutoff to 14 November 2022): obtained from the corresponding FRS UKDS study series.
-- `Scripts/01_hbai_prep.R` and `Scripts/01b_hbai_prep_placebo.R` build the two processed extracts (`hbai_clean.csv`, `hbai_clean_placebo.csv`) that every other script reads. These processed CSVs are also excluded from the repository under the same licence terms; anyone re-running this pipeline needs their own UKDS access and must set `DATA_ROOT` in `01_hbai_prep.R` to their own local path.
+- `Scripts/01_hbai_prep.R` builds the two processed extracts (`hbai_clean.csv`, `hbai_clean_placebo.csv`) that every other script reads. These processed CSVs are also excluded from the repository under the same licence terms; anyone re-running this pipeline needs their own UKDS access and must set `DATA_ROOT` in `01_hbai_prep.R` to their own local path.
 
 ## Requirements
 
@@ -20,8 +20,7 @@ Run in the order below; scripts 03–09, 12 and 13 each depend only on `hbai_cle
 
 | Script | Purpose | Key outputs (`tables/`, `figures/`) |
 |---|---|---|
-| `01_hbai_prep.R` | Builds the main analytic extract: restricts to England/Scotland children, constructs the MDCH flag, the ten deprivation items, `mdch_any`/`mdch_severe` composites, food insecurity, and the exact 14-Nov-2022 SCP post-treatment cutoff from FRS interview dates. | `hbai_clean.csv` (data, not checked in) |
-| `01b_hbai_prep_placebo.R` | Same construction as above but including Wales and Northern Ireland, for the falsification checks. | `hbai_clean_placebo.csv` (data, not checked in) |
+| `01_hbai_prep.R` | Builds both analytic extracts from one shared load of the raw HBAI files: the main England/Scotland extract (constructs the MDCH flag, the ten deprivation items, `mdch_any`/`mdch_severe` composites, food insecurity, and the exact 14-Nov-2022 SCP post-treatment cutoff from FRS interview dates) and a second, wider extract including Wales and Northern Ireland for the falsification check. Merged from two near-duplicate scripts (01 + 01b) on 2026-08-28. | `hbai_clean.csv`, `hbai_clean_placebo.csv` (data, not checked in) |
 | `02_hbai_summary_stats.R` / `02_summary_stats.R` | Descriptive statistics: sample composition by year/country, outcome prevalence by country/period, background characteristics table. | `sample_composition.csv`, `background_characteristics.csv`, `summary_table.csv`, `table_a1_by_period.csv` |
 | `03_stage1_baseline_did.R` | Stage 1: baseline OLS DiD (Simple/Adjusted/Extended specifications) for the official MDCH flag, food insecurity, and the two composite outcomes; CASE exact-replication spec; FYE2022-exclusion and age-restricted robustness checks. | `table_simple_did.csv`, `table_adj_did.csv`, `table_adj_ext_did.csv`, `table_case_exact_did.csv`, `table_fye2022_excl_did.csv`, `table_age_restricted_did.csv`, `table_item_did.csv` |
 | `04_stage2_item_did.R` | Stage 2: item-stacked DiD (pooled and item-interacted, household-clustered). | `stacked_item_did.csv` |

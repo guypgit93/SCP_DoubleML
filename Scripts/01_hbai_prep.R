@@ -1,30 +1,37 @@
 # =============================================================================
 # 01_hbai_prep.R
 # HBAI data prep for the Scottish Child Payment dissertation.
-# Loads the harmonised HBAI extracts, restricts to England/Scotland children,
-# builds deprivation/food-security outcomes and DiD variables, saves hbai_clean.csv.
+#
+# Builds BOTH extracts the rest of the pipeline needs, from one shared load
+# of the raw HBAI files:
+#   - hbai_clean.csv          England vs Scotland only. Everything downstream
+#                             (03, 04, 05, 05b, 05c, 06, 06b, 07, 08, 09, 12,
+#                             13) reads this one.
+#   - hbai_clean_placebo.csv  all four UK nations. Only 10_placebo_wales_ni.R
+#                             reads this -- it's the Wales/NI falsification
+#                             check, which needs Wales and NI in the data.
 #
 # Key choices:
-#   - Scotland/England defined via COUNTRY (1=Eng,2=Wales,3=Scot,4=NI).
+#   - Scotland/England/Wales/NI defined via COUNTRY (1/2/3/4).
 #   - food_insecure uses FOODSEC_STATUS_CAT (official DWP category), HHSHARE==1 only.
 #   - Primary deprivation outcome is MDCH (official DWP flag), not a homemade item count.
 #   - mdch_observed = !is.na(MDCH).
-#   - Also pulls household interview date from the RAW FRS household files
-#     (across all available FRS years, not just FY2022/23) to (a) set the
-#     exact 14 Nov 2022 SCP post cutoff and (b) add quarter_label/
-#     quarter_start/quarter_index columns replicating CASE (Andersen, Nesom,
-#     Patrick, Pinter, Stewart & Tominey 2025, CASE paper 238) Table A3's
-#     rolling 13-week quarters, for use by 05c_stage1_parallel_trends_quarterly.R.
-#     HBAI's own harmonised extract carries no interview-date field.
+#   - Household interview dates come from the RAW FRS household files (HBAI's
+#     harmonised extract has no interview-date field), used to (a) set the
+#     exact 14 Nov 2022 SCP post cutoff and (b) add CASE-style rolling
+#     13-week quarter bins (Andersen, Nesom, Patrick, Pinter, Stewart &
+#     Tominey 2025, CASE paper 238, Table A3) for 05c.
+#
 # Requires: tidyverse
 # =============================================================================
 
 library(tidyverse)
 
-# ── Paths ────────────────────────────────────────────────────────────────────
-DATA_ROOT <- "/Users/guypigott/python-venv-demo/Dissertation"
-HBAI_ROOT <- file.path(DATA_ROOT, "UKDA-5828-tab", "tab", "23-24prices")
-HBAI_OUT  <- file.path(DATA_ROOT, "data", "hbai_clean.csv")
+# ---- Paths ------------------------------------------------------------------
+DATA_ROOT   <- "/Users/guypigott/python-venv-demo/Dissertation"
+HBAI_ROOT   <- file.path(DATA_ROOT, "UKDA-5828-tab", "tab", "23-24prices")
+OUT_MAIN    <- file.path(DATA_ROOT, "data", "hbai_clean.csv")
+OUT_PLACEBO <- file.path(DATA_ROOT, "data", "hbai_clean_placebo.csv")
 
 HBAI_FILES <- c(
   "i1518e_2324prices.tab",   # 2015/16 - 2017/18
@@ -38,7 +45,7 @@ SCP_EXPAND_YEAR <- 2023   # FY 2022/23: SCP extended to all under-16s, £25/week
 MDCH_ITEMS <- c("MDCH_BED", "MDCH_CEL", "MDCH_COAT", "MDCH_EQP", "MDCH_HOL",
                 "MDCH_PLAY", "MDCH_PLY", "MDCH_TEA", "MDCH_TRP", "MDCH_VEG")
 
-# Identifiers, geography, outcomes, and DML covariates (used in 04_dml_did.R)
+# Identifiers, geography, outcomes, and DML covariates (wide set used in 06b)
 KEEP_VARS <- c(
   "SERNUM", "BENUNIT", "PERSON", "YEAR_CODE",
   "COUNTRY", "GVTREGN",
@@ -47,7 +54,6 @@ KEEP_VARS <- c(
   "LOWINCMDCH", "LOWINCMDCHSEV",
   "FOODSEC", "FOODSEC_STATUS_CAT", "HHSHARE",
   "GS_INDCH",
-  # DML covariates
   "SEX", "AGEBAND_CH", "AGEHD", "AGEHDBAND", "AGEHDBAND_KID", "SEXHD",
   "AGESP", "AGESPBAND",
   "COUPLE_KID", "NEWFAMBU_SINGLE", "NEWFAMBU_KID", "NUMBKIDS",
@@ -68,21 +74,146 @@ KEEP_VARS <- c(
   "ETH", "ETHGRPHHPUB", "ETHGRPHH"
 )
 
-# GVTREGN region groupings, used for regional FE / clustering (not treatment)
+# GVTREGN region groupings, used for a diagnostic + the northern_england
+# flag (England subgroup, not a treatment definition)
 ENGLAND_REGIONS  <- c(1, 2, 4, 5, 6, 7, 8, 9, 10)
 SCOTLAND_REGION  <- 12
 NORTHERN_ENGLAND <- c(1, 2, 4)
 
+# Raw FRS household files, one per survey year, for the exact interview-date cutoff
+FRS_YEARS <- c(
+  "UKDA-8336" = 2017,   # 2016-17
+  "UKDA-8460" = 2018,   # 2017-18
+  "UKDA-8633" = 2019,   # 2018-19
+  "UKDA-8802" = 2020,   # 2019-20
+  "UKDA-8948" = 2021,   # 2020-21 (COVID year -- already excluded below, kept for completeness/no-op)
+  "UKDA-9073" = 2022,   # 2021-22 (SCP introduced Feb 2021)
+  "UKDA-9252" = 2023,   # 2022-23 (SCP expanded Nov 2022 -- the year this actually matters for)
+  "UKDA-9367" = 2024    # 2023-24
+)
+HHOLD_PATTERN <- "^(hhold|househol|hhld|household)(_v[0-9]+)?\\.tab$"
+
+# =============================================================================
+# HELPERS
+# =============================================================================
+
+# MDCH item codes: 1=has item -> 0 (not deprived); 2=wants but can't afford ->
+# 1 (deprived); 0/3/-9/.A = not asked / doesn't want / missing -> NA
+recode_mdch_item <- function(x) {
+  x <- suppressWarnings(as.numeric(x))
+  case_when(x == 1 ~ 0, x == 2 ~ 1, TRUE ~ NA_real_)
+}
+
+# Finds one year's raw household .tab file (prefers the _v2 revision if there is one)
+find_hhold <- function(ukda_folder) {
+  tab_root <- file.path(DATA_ROOT, paste0(ukda_folder, "-tab"), "tab")
+  if (!dir.exists(tab_root)) return(NA_character_)
+  found <- list.files(tab_root, pattern = HHOLD_PATTERN, recursive = TRUE,
+                      full.names = TRUE, ignore.case = TRUE)
+  if (length(found) == 0) return(NA_character_)
+  if (any(grepl("v2", found, ignore.case = TRUE))) found[grepl("v2", found, ignore.case = TRUE)][1] else found[1]
+}
+
+# Pulls SERNUM + interview date out of one year's household file. UKDA has
+# used both a MM/DD/YYYY text date and a numeric day-count (origin
+# 1960-01-01) across versions of this file -- detect which one this is.
+parse_hhold_dates <- function(path, year_int) {
+  cat(sprintf("  Using: %s (FYE %d)\n", path, year_int))
+  hh <- read_tsv(path, show_col_types = FALSE, col_types = cols(.default = col_character()))
+  names(hh) <- toupper(trimws(names(hh)))
+
+  date_col <- intersect(c("INTDATE", "INTDATM", "INTDAT"), names(hh))
+  if (length(date_col) == 0) {
+    cat("    No INTDATE/INTDATM/INTDAT column -- skipping this year.\n")
+    return(NULL)
+  }
+  raw_dates <- hh[[date_col[1]]]
+  looks_like_slash_date <- any(grepl("/", raw_dates), na.rm = TRUE)
+  out <- if (looks_like_slash_date) {
+    hh |> transmute(SERNUM  = suppressWarnings(as.numeric(SERNUM)),
+                     intdate = suppressWarnings(as.Date(raw_dates, format = "%m/%d/%Y")))
+  } else {
+    hh |> transmute(SERNUM  = suppressWarnings(as.numeric(SERNUM)),
+                     intdate = suppressWarnings(as.Date(as.numeric(raw_dates), origin = "1960-01-01")))
+  }
+  out <- out |> filter(!is.na(SERNUM), !is.na(intdate))
+  out$YEAR <- year_int
+  cat(sprintf("    Parsed %s of %s rows to valid dates.\n", nrow(out), nrow(hh)))
+  out
+}
+
+# CASE (2025) Table A3 rolling-quarter bins: 13-week windows anchored on the
+# 14th of Feb/May/Aug/Nov. Confirmed against the
+# actual PDF's row labels (e.g. "Scot * 14th November 2022 - 13th February 2023").
+assign_quarter <- function(d) {
+  if (is.na(d)) return(c(label = NA_character_, start = NA_character_))
+  anchor_mmdd <- c("02-14", "05-14", "08-14", "11-14")
+  yr <- as.integer(format(d, "%Y"))
+  candidates <- sort(as.Date(paste0(rep((yr - 1):(yr + 1), each = 4), "-", anchor_mmdd)))
+  start <- max(candidates[candidates <= d])
+  end   <- min(candidates[candidates > d]) - 1
+  c(label = sprintf("%s_%s", format(start, "%Y-%m-%d"), format(end, "%Y-%m-%d")),
+    start = as.character(start))
+}
+
+# Builds a SERNUM+YEAR -> interview date (+ CASE quarter bin) lookup across
+# every FRS year we have a raw download for. Joining on SERNUM+YEAR together,
+# not SERNUM alone, since household ID numbers are only guaranteed unique
+# within one year's file, not across years. Returns NULL if no household
+# files were found at all (e.g. FY2016/17 has none in this project).
+build_interview_dates <- function() {
+  hh_dates_list <- list()
+  for (ukda_folder in names(FRS_YEARS)) {
+    year_int <- FRS_YEARS[[ukda_folder]]
+    path <- find_hhold(ukda_folder)
+    if (is.na(path)) {
+      cat(sprintf("  ! %s (FYE %d): household file not found -- skipping.\n", ukda_folder, year_int))
+      next
+    }
+    parsed <- parse_hhold_dates(path, year_int)
+    if (!is.null(parsed) && nrow(parsed) > 0) hh_dates_list[[ukda_folder]] <- parsed
+  }
+  if (length(hh_dates_list) == 0) return(NULL)
+
+  hh_dates <- bind_rows(hh_dates_list)
+  cat(sprintf("\nCombined interview dates: %s rows across %d FRS years.\n",
+              format(nrow(hh_dates), big.mark = ","), length(hh_dates_list)))
+
+  q <- t(vapply(hh_dates$intdate, assign_quarter, character(2)))
+  hh_dates$quarter_label <- q[, "label"]
+  hh_dates$quarter_start <- as.Date(q[, "start"])
+  quarter_levels <- sort(unique(hh_dates$quarter_start[!is.na(hh_dates$quarter_start)]))
+  hh_dates$quarter_index <- match(hh_dates$quarter_start, quarter_levels)
+  cat(sprintf("  %d distinct quarter windows: %s to %s\n",
+              length(quarter_levels), min(quarter_levels), max(quarter_levels)))
+
+  dupes <- hh_dates |> count(SERNUM, YEAR) |> filter(n > 1)
+  if (nrow(dupes) > 0) {
+    cat(sprintf("  *** WARNING: %d SERNUM+YEAR combos appear more than once -- merge will duplicate rows for these. Investigate. ***\n", nrow(dupes)))
+  }
+  hh_dates
+}
+
+# Refines `post`/`did` to the exact 14-Nov-2022 cutoff for FY2022/23 rows
+# (every other year keeps the financial-year-based post) and attaches the
+# CASE quarter columns. No-op if hh_dates is NULL.
+apply_interview_dates <- function(df, hh_dates) {
+  if (is.null(hh_dates)) {
+    cat("  No FRS household files loaded -- `post` stays FY-based, no quarter columns added.\n")
+    return(df)
+  }
+  df |>
+    left_join(hh_dates, by = c("SERNUM", "YEAR")) |>
+    mutate(
+      post = if_else(YEAR == 2023 & !is.na(intdate),
+                      as.numeric(intdate >= as.Date("2022-11-14")), post),
+      did  = treated * post
+    )
+}
+
 # =============================================================================
 # LOAD AND STACK
 # =============================================================================
-
-# MDCH item codes: 1=has item -> 0 (not deprived); 2=wants but can't afford -> 1
-# (deprived); 0/3/-9/.A = not asked / doesn't want / missing -> NA
-recode_mdch_item <- function(x) {
-  x <- suppressWarnings(as.numeric(x))
-  dplyr::case_when(x == 1 ~ 0, x == 2 ~ 1, TRUE ~ NA_real_)
-}
 
 all_dfs <- list()
 
@@ -94,8 +225,7 @@ for (fname in HBAI_FILES) {
   }
 
   cat(sprintf("\nLoading %s...\n", fname))
-  # Read as character first, then coerce -- avoids readr's type-guessing
-  # silently NA-ing a column on a bad guess.
+  # Read as character first, then coerce.
   raw <- read_tsv(fpath, show_col_types = FALSE, col_types = cols(.default = col_character()))
   names(raw) <- toupper(trimws(names(raw)))
   cat(sprintf("  Raw shape: %d rows x %d cols\n", nrow(raw), ncol(raw)))
@@ -115,11 +245,9 @@ for (fname in HBAI_FILES) {
   if (all(c("GVTREGN", "GS_INDWA") %in% names(raw))) {
     gvtregn_vals <- suppressWarnings(as.numeric(raw$GVTREGN))
     gsindwa_vals <- suppressWarnings(as.numeric(raw$GS_INDWA))
-    n_distinct_gvtregn <- length(unique(na.omit(gvtregn_vals)))
-    n_distinct_gsindwa <- length(unique(na.omit(gsindwa_vals)))
-    if (n_distinct_gvtregn <= 20 && max(gvtregn_vals, na.rm = TRUE) <= 20) {
+    if (length(unique(na.omit(gvtregn_vals))) <= 20 && max(gvtregn_vals, na.rm = TRUE) <= 20) {
       cat("  GVTREGN looks like clean region codes; no swap.\n")
-    } else if (n_distinct_gsindwa <= 20 && max(gsindwa_vals, na.rm = TRUE) <= 20) {
+    } else if (length(unique(na.omit(gsindwa_vals))) <= 20 && max(gsindwa_vals, na.rm = TRUE) <= 20) {
       cat("  GS_INDWA looks like clean region codes; swapping into GVTREGN.\n")
       raw <- raw |> rename(GVTREGN_RAW = GVTREGN, GVTREGN = GS_INDWA)
     } else {
@@ -143,18 +271,13 @@ for (fname in HBAI_FILES) {
   if (all(is.na(d$YEAR))) stop(sprintf("YEAR is entirely NA after parsing %s", fname))
   cat(sprintf("  Years in file: %s\n", paste(sort(unique(d$YEAR)), collapse = ", ")))
 
-  # Geography filter: England + Scotland only
-  d <- d |> filter(COUNTRY %in% c(1, 3))
-  d <- d |>
-    mutate(
-      scotland         = as.numeric(COUNTRY == 3),
-      northern_england = as.numeric(scotland == 0 & GVTREGN %in% NORTHERN_ENGLAND)
-    )
-  cat(sprintf("  After geo filter - Scotland: %s, England: %s\n",
-              format(sum(d$scotland == 1), big.mark = ","),
-              format(sum(d$scotland == 0), big.mark = ",")))
+  # Country filter.
+  d <- d |> filter(COUNTRY %in% c(1, 2, 3, 4))
+  cat(sprintf("  After geo filter - England: %s, Wales: %s, Scotland: %s, NI: %s\n",
+              format(sum(d$COUNTRY == 1), big.mark = ","), format(sum(d$COUNTRY == 2), big.mark = ","),
+              format(sum(d$COUNTRY == 3), big.mark = ","), format(sum(d$COUNTRY == 4), big.mark = ",")))
 
-  # Sentinel cleanup: negative codes -> NA (valid category codes are always >= 0)
+  # Avoid negative codes -> NA (valid category codes are always >= 0)
   d <- d |> mutate(across(where(is.numeric), ~ if_else(.x < 0, NA_real_, .x)))
 
   all_dfs[[fname]] <- d
@@ -164,7 +287,7 @@ for (fname in HBAI_FILES) {
 if (length(all_dfs) == 0) stop(sprintf("No HBAI files loaded. Check HBAI_ROOT: %s", HBAI_ROOT))
 
 df <- bind_rows(all_dfs)
-cat(sprintf("\n%s\nCombined: %s rows, years: %s\n", strrep("=", 60),
+cat(sprintf("\n%s\nCombined (all 4 nations): %s rows, years: %s\n", strrep("=", 60),
             format(nrow(df), big.mark = ","), paste(sort(unique(df$YEAR)), collapse = ", ")))
 
 # =============================================================================
@@ -183,7 +306,7 @@ df <- df |> filter(YEAR != 2021)   # COVID-19 survey disruption
 cat(sprintf("Exclude 2020/21:      %8s -> %s rows\n", format(n0, big.mark = ","), format(nrow(df), big.mark = ",")))
 
 # =============================================================================
-# SANITY-CHECK DIAGNOSTICS
+# DIAGNOSTICS
 # =============================================================================
 cat("\n--- COUNTRY vs GVTREGN cross-tab ---\n")
 print(table(country = df$COUNTRY, scotland_via_gvtregn = ifelse(df$GVTREGN == SCOTLAND_REGION, "Scotland", "Other"), useNA = "ifany"))
@@ -200,7 +323,7 @@ cat("\nFOODSEC (continuous 0-10 score):\n")
 print(summary(df$FOODSEC))
 
 # =============================================================================
-# RECODE LCA INDICATORS (individual MDCH_* items -> 0/1/NA)
+# RECODE DEPRIVATION ITEMS + FOOD SECURITY
 # =============================================================================
 available_items <- intersect(MDCH_ITEMS, names(df))
 missing_items    <- setdiff(MDCH_ITEMS, names(df))
@@ -209,13 +332,9 @@ if (length(missing_items) > 0) cat(sprintf("  Missing: %s\n", paste(missing_item
 
 df <- df |> mutate(across(all_of(available_items), recode_mdch_item))
 
-# Approximate item-count severity measure (not the official DWP flag -- see MDCH below)
-# mdch_severe threshold changed 3 -> >5 (2026-08-14, revised same day from an initial
-# >=2): no fixed-count convention in the literature cleanly justifies a specific cut
-# (Nicoriciu & Elliot 2025 explicitly argue against arbitrary count thresholds), so this
-# is motivated instead by scaling Eurostat's official severe material deprivation
-# indicator (currently 7 of 13 items, ~54%) onto our 10-item scale (~5.4 items), rounded
-# to "more than five" (6+) as the closest whole-item cut.
+# Approximate item-count severity measure. mdch_severe threshold (>5 of 10) is scaled from Eurostat's
+# official severe-deprivation indicator (7 of 13 items, ~54%) onto
+# 10-item scale (~5.4 items).
 item_mat <- as.matrix(df[available_items])
 n_observed <- rowSums(!is.na(item_mat))
 df$mdch_count <- ifelse(n_observed == 0, NA_real_, rowSums(item_mat, na.rm = TRUE))
@@ -233,18 +352,13 @@ df <- df |> mutate(mdch_observed = as.numeric(!is.na(MDCH)))
 cat(sprintf("Official MDCH non-missing: %s (prevalence %.3f)\n",
             format(sum(df$mdch_observed), big.mark = ","), mean(df$MDCH, na.rm = TRUE)))
 
-# =============================================================================
-# FOOD SECURITY
 # food_insecure = FOODSEC_STATUS_CAT==2 (official DWP category), restricted to
-# HHSHARE==1 per the variable guide. NAs left as-is (genuine non-response, plus
-# FOODSEC_STATUS_CAT is structurally unavailable before FYE2020 -- confirmed via
-# table(df$YEAR, !is.na(food_insecure)): FYE2017-2019 are 100% NA, FYE2020 is
-# ~100% observed (n=7,653), FYE2021 already excluded pipeline-wide (Covid), and
-# FYE2022-2024 are ~100% observed. So the food-insecurity DiD's pre-period is
-# effectively FYE2020 only, not FYE2017-2020 as for the other outcomes -- see
-# Methodology note on identification window before interpreting this estimate.
-# very_low_food_sec isn't derivable from this 2-category variable -> NA.
-# =============================================================================
+# HHSHARE==1 per the variable guide. Structurally unavailable before FYE2020
+# (confirmed via table(df$YEAR, !is.na(food_insecure)): FYE2017-19 are 100%
+# NA), so its pre-period is effectively FYE2020 only, not FYE2017-2020 like
+# the other outcomes -- see the Methodology note on identification window
+# before interpreting this estimate. very_low_food_sec isn't derivable from
+# this 2-category variable -> always NA.
 df <- df |>
   mutate(
     food_insecure     = if_else(HHSHARE == 1 & !is.na(FOODSEC_STATUS_CAT),
@@ -255,156 +369,85 @@ cat(sprintf("food_insecure non-missing: %s  prevalence: %.3f\n",
             format(sum(!is.na(df$food_insecure)), big.mark = ","), mean(df$food_insecure, na.rm = TRUE)))
 
 # =============================================================================
-# DiD VARIABLES
-# post/did start on a financial-year basis (all of FY2022/23 = post); the
-# block below overwrites `post` for FY2022/23 with the exact 14 Nov 2022 SCP
-# cutoff if an FRS household file with interview dates is available.
+# INTERVIEW DATES -- build once, reuse for both extracts below
 # =============================================================================
-df <- df |>
+cat("\n--- Building interview-date lookup from raw FRS household files ---\n")
+hh_dates <- build_interview_dates()
+
+# =============================================================================
+# EXTRACT 1: ENGLAND + SCOTLAND -> hbai_clean.csv
+# =============================================================================
+cat(sprintf("\n%s\nBUILDING MAIN EXTRACT (England + Scotland)\n%s\n", strrep("=", 60), strrep("=", 60)))
+
+df_main <- df |>
+  filter(COUNTRY %in% c(1, 3)) |>
   mutate(
-    post    = as.numeric(YEAR >= SCP_EXPAND_YEAR),
-    treated = scotland,
-    did     = treated * post
+    scotland         = as.numeric(COUNTRY == 3),
+    northern_england = as.numeric(scotland == 0 & GVTREGN %in% NORTHERN_ENGLAND),
+    post             = as.numeric(YEAR >= SCP_EXPAND_YEAR),
+    treated          = scotland,
+    did              = treated * post
+  )
+cat(sprintf("Scotland: %s, England: %s\n",
+            format(sum(df_main$scotland == 1), big.mark = ","), format(sum(df_main$scotland == 0), big.mark = ",")))
+
+df_main <- apply_interview_dates(df_main, hh_dates)
+cat(sprintf("  FY2022/23 rows reclassified: %s Pre, %s Post (of %s total in that year)\n",
+            format(sum(df_main$YEAR == 2023 & df_main$post == 0), big.mark = ","),
+            format(sum(df_main$YEAR == 2023 & df_main$post == 1), big.mark = ","),
+            format(sum(df_main$YEAR == 2023), big.mark = ",")))
+if ("quarter_label" %in% names(df_main)) {
+  cat("  Quarter match rate by year (0%% = no FRS raw download for that year):\n")
+  print(df_main |> group_by(YEAR) |> summarise(matched = mean(!is.na(quarter_label)), .groups = "drop"))
+}
+
+cat(sprintf("\n%s\nSAMPLE BY YEAR AND GROUP (main extract)\n", strrep("=", 60)))
+print(df_main |> count(YEAR, scotland) |> pivot_wider(names_from = scotland, values_from = n, names_prefix = "scotland_"))
+
+dir.create(dirname(OUT_MAIN), showWarnings = FALSE, recursive = TRUE)
+write_csv(df_main, OUT_MAIN)
+cat(sprintf("\nSaved to %s\n  Shape: %d rows x %d cols\n", OUT_MAIN, nrow(df_main), ncol(df_main)))
+
+# =============================================================================
+# EXTRACT 2: ALL FOUR NATIONS -> hbai_clean_placebo.csv
+# Only 10_placebo_wales_ni.R reads this. treated/post/did below are Scotland-
+# specific -- they don't drive the actual Wales/NI checks. Script 10 builds
+# its own treated/tp for each comparison (Wales vs England, NI vs England),
+# since Wales and NI never got SCP and need their own placebo logic.
+# =============================================================================
+cat(sprintf("\n%s\nBUILDING PLACEBO EXTRACT (all four nations)\n%s\n", strrep("=", 60), strrep("=", 60)))
+
+df_placebo <- df |>
+  mutate(
+    scotland  = as.numeric(COUNTRY == 3),
+    wales     = as.numeric(COUNTRY == 2),
+    ni        = as.numeric(COUNTRY == 4),
+    country_f = factor(COUNTRY, levels = c(1, 2, 3, 4), labels = c("England", "Wales", "Scotland", "NI")),
+    post      = as.numeric(YEAR >= SCP_EXPAND_YEAR),
+    treated   = scotland,
+    did       = treated * post
   )
 
-# =============================================================================
-# INTERVIEW DATE (all years) -- exact 14 Nov 2022 post cutoff + CASE-style
-# quarter bins
-# HBAI's harmonised extract has no interview-date variable, so this pulls
-# INTDATE from each year's RAW FRS household file and merges by SERNUM+YEAR
-# (not SERNUM alone -- SERNUM isn't guaranteed unique across FRS years, only
-# safe here because each year is parsed and tagged with YEAR before
-# stacking). No-op (columns stay NA) for any year whose household file isn't
-# found, e.g. FY2016/17 has no FRS raw download in this project.
-#
-# Used for two things:
-#   (a) `post`/`did` get the exact 14 Nov 2022 cutoff for FY2022/23 (as
-#       before -- other years keep the FY-based post/did, that choice is
-#       unchanged)
-#   (b) quarter_label/quarter_start/quarter_index -- rolling 13-week windows
-#       anchored on the 14th of Feb/May/Aug/Nov, replicating CASE (Andersen,
-#       Nesom, Patrick, Pinter, Stewart & Tominey 2025, CASE paper 238)
-#       Table A3 exactly (confirmed against the actual PDF's row labels, e.g.
-#       "Scot * 14th November 2022 - 13th February 2023"). Consumed by
-#       05c_stage1_parallel_trends_quarterly.R.
-# =============================================================================
-FRS_YEARS <- c(
-  "UKDA-8336" = 2017,   # 2016-17
-  "UKDA-8460" = 2018,   # 2017-18
-  "UKDA-8633" = 2019,   # 2018-19
-  "UKDA-8802" = 2020,   # 2019-20
-  "UKDA-8948" = 2021,   # 2020-21 (COVID year -- already excluded from df above, kept here for completeness/no-op)
-  "UKDA-9073" = 2022,   # 2021-22 (SCP introduced Feb 2021)
-  "UKDA-9252" = 2023,   # 2022-23 (SCP expanded Nov 2022)
-  "UKDA-9367" = 2024    # 2023-24
-)
-hhold_pattern <- "^(hhold|househol|hhld|household)(_v[0-9]+)?\\.tab$"
+df_placebo <- apply_interview_dates(df_placebo, hh_dates)
+cat(sprintf("  FY2022/23 rows reclassified: %s Pre, %s Post (of %s total in that year)\n",
+            format(sum(df_placebo$YEAR == 2023 & df_placebo$post == 0), big.mark = ","),
+            format(sum(df_placebo$YEAR == 2023 & df_placebo$post == 1), big.mark = ","),
+            format(sum(df_placebo$YEAR == 2023), big.mark = ",")))
 
-find_hhold <- function(ukda_folder) {
-  tab_root <- file.path(DATA_ROOT, paste0(ukda_folder, "-tab"), "tab")
-  if (!dir.exists(tab_root)) return(NA_character_)
-  found <- list.files(tab_root, pattern = hhold_pattern, recursive = TRUE,
-                      full.names = TRUE, ignore.case = TRUE)
-  if (length(found) == 0) return(NA_character_)
-  if (any(grepl("v2", found, ignore.case = TRUE))) found[grepl("v2", found, ignore.case = TRUE)][1] else found[1]
+cat("\nOfficial MDCH prevalence BY COUNTRY (sanity check before the placebo regressions):\n")
+print(df_placebo |> filter(mdch_observed == 1) |> group_by(country_f) |>
+        summarise(prevalence = mean(MDCH), n = n(), .groups = "drop"))
+
+# FYE2024's old/new MDCH question-design split isn't even across nations --
+# NI's harmonised extract is 100% new-design (a NISRA sample-size decision)
+# vs ~27-30% old-design for GB nations, so NI's flag is on a different
+# vintage of the question than everyone else that one year.
+if ("MDCHDMP" %in% names(df_placebo)) {
+  cat("\nFYE2024 old/new MDCH question-design split BY COUNTRY (MDCHDMP: 1=old, 2=new):\n")
+  print(df_placebo |> filter(YEAR == 2024, !is.na(MDCHDMP)) |> count(country_f, MDCHDMP) |>
+          pivot_wider(names_from = MDCHDMP, values_from = n, names_prefix = "MDCHDMP_"))
 }
 
-parse_hhold_dates <- function(path, year_int) {
-  cat(sprintf("  Using: %s (FYE %d)\n", path, year_int))
-  hh <- read_tsv(path, show_col_types = FALSE, col_types = cols(.default = col_character()))
-  names(hh) <- toupper(trimws(names(hh)))
-
-  date_col <- intersect(c("INTDATE", "INTDATM", "INTDAT"), names(hh))
-  if (length(date_col) == 0) {
-    cat("    No column named INTDATE/INTDATM/INTDAT found -- skipping this year.\n")
-    return(NULL)
-  }
-  raw_dates <- hh[[date_col[1]]]
-
-  # UKDA has used both MM/DD/YYYY text and a numeric day-count (origin
-  # 1960-01-01) across versions of this file -- detect which one this is.
-  looks_like_slash_date <- any(grepl("/", raw_dates), na.rm = TRUE)
-  if (looks_like_slash_date) {
-    out <- hh |> transmute(SERNUM  = suppressWarnings(as.numeric(SERNUM)),
-                           intdate = suppressWarnings(as.Date(raw_dates, format = "%m/%d/%Y")))
-  } else {
-    out <- hh |> transmute(SERNUM  = suppressWarnings(as.numeric(SERNUM)),
-                           intdate = suppressWarnings(as.Date(as.numeric(raw_dates), origin = "1960-01-01")))
-  }
-  out <- out |> filter(!is.na(SERNUM), !is.na(intdate))
-  out$YEAR <- year_int
-  cat(sprintf("    Parsed %s of %s rows to valid dates.\n", nrow(out), nrow(hh)))
-  out
-}
-
-hh_dates_list <- list()
-for (ukda_folder in names(FRS_YEARS)) {
-  year_int <- FRS_YEARS[[ukda_folder]]
-  path <- find_hhold(ukda_folder)
-  if (is.na(path)) {
-    cat(sprintf("  ! %s (FYE %d): household file not found under %s-tab/tab/ -- skipping.\n",
-                ukda_folder, year_int, ukda_folder))
-    next
-  }
-  parsed <- parse_hhold_dates(path, year_int)
-  if (!is.null(parsed) && nrow(parsed) > 0) hh_dates_list[[ukda_folder]] <- parsed
-}
-
-if (length(hh_dates_list) == 0) {
-  cat("\nNo FRS household files loaded -- `post` stays FY-based, no quarter columns added.\n")
-} else {
-  hh_dates <- bind_rows(hh_dates_list)
-  cat(sprintf("\nCombined interview dates: %s rows across %d FRS years.\n",
-              format(nrow(hh_dates), big.mark = ","), length(hh_dates_list)))
-
-  # CASE (2025) Table A3 rolling-quarter bins: 13-week windows anchored on
-  # the 14th of Feb/May/Aug/Nov -- NOT calendar quarters.
-  anchor_mmdd <- c("02-14", "05-14", "08-14", "11-14")
-  assign_quarter <- function(d) {
-    if (is.na(d)) return(c(label = NA_character_, start = NA_character_))
-    yr <- as.integer(format(d, "%Y"))
-    candidates <- sort(as.Date(paste0(rep((yr - 1):(yr + 1), each = 4), "-", anchor_mmdd)))
-    start <- max(candidates[candidates <= d])
-    end   <- min(candidates[candidates > d]) - 1
-    c(label = sprintf("%s_%s", format(start, "%Y-%m-%d"), format(end, "%Y-%m-%d")),
-      start = as.character(start))
-  }
-  q <- t(vapply(hh_dates$intdate, assign_quarter, character(2)))
-  hh_dates$quarter_label <- q[, "label"]
-  hh_dates$quarter_start <- as.Date(q[, "start"])
-  quarter_levels <- sort(unique(hh_dates$quarter_start[!is.na(hh_dates$quarter_start)]))
-  hh_dates$quarter_index <- match(hh_dates$quarter_start, quarter_levels)
-  cat(sprintf("  %d distinct quarter windows: %s to %s\n",
-              length(quarter_levels), min(quarter_levels), max(quarter_levels)))
-
-  dupes <- hh_dates |> count(SERNUM, YEAR) |> filter(n > 1)
-  if (nrow(dupes) > 0) {
-    cat(sprintf("  *** WARNING: %d SERNUM+YEAR combos appear more than once in the household files",
-                nrow(dupes)), " -- merge below will duplicate rows for these. Investigate. ***\n")
-  }
-
-  df <- df |>
-    left_join(hh_dates, by = c("SERNUM", "YEAR")) |>
-    mutate(
-      post = if_else(YEAR == 2023 & !is.na(intdate),
-                      as.numeric(intdate >= as.Date("2022-11-14")),
-                      post),
-      did  = treated * post
-    )
-  cat(sprintf("  FY2022/23 rows reclassified: %s Pre, %s Post (of %s total in that year)\n",
-              format(sum(df$YEAR == 2023 & df$post == 0), big.mark = ","),
-              format(sum(df$YEAR == 2023 & df$post == 1), big.mark = ","),
-              format(sum(df$YEAR == 2023), big.mark = ",")))
-  cat("  Quarter match rate by year (0%% = no FRS raw download for that year):\n")
-  print(df |> group_by(YEAR) |> summarise(matched = mean(!is.na(quarter_label)), .groups = "drop"))
-}
-
-# =============================================================================
-# SAVE
-# =============================================================================
-cat(sprintf("\n%s\nSAMPLE BY YEAR AND GROUP\n", strrep("=", 60)))
-print(df |> count(YEAR, scotland) |> pivot_wider(names_from = scotland, values_from = n, names_prefix = "scotland_"))
-
-dir.create(dirname(HBAI_OUT), showWarnings = FALSE, recursive = TRUE)
-write_csv(df, HBAI_OUT)
-cat(sprintf("\nSaved to %s\n  Shape: %d rows x %d cols\n", HBAI_OUT, nrow(df), ncol(df)))
+dir.create(dirname(OUT_PLACEBO), showWarnings = FALSE, recursive = TRUE)
+write_csv(df_placebo, OUT_PLACEBO)
+cat(sprintf("\nSaved to %s\n  Shape: %d rows x %d cols\n", OUT_PLACEBO, nrow(df_placebo), ncol(df_placebo)))

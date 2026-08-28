@@ -3,37 +3,8 @@
 # FALSIFICATION/PLACEBO CHECK (feedback point 2): Wales and NI never received
 # SCP -- so if we run the SAME DiD spec Stage 1 uses for Scotland-vs-England,
 # but with Wales (or NI) standing in as the "treated" nation against England,
-# using the EXACT SAME post-period cutoff (SCP's real rollout timing, 14 Nov
-# 2022 refinement / YEAR>=2023), we should find NOTHING -- no significant
-# break in deprivation for Wales or NI around the date SCP actually expanded
-# in Scotland, because neither of them got the policy.
-#
-# WHY THIS IS THE RIGHT DESIGN (revised 30 July 2026 after feedback -- the
-# earlier version of this script incorrectly compared Scotland against Wales/
-# NI as alternative CONTROL groups, which answers a different question and
-# wasn't what was wanted):
-# A null Wales-vs-England and NI-vs-England result at SCP's actual timing is
-# what tells you Scotland's own estimated effect (Section 4) is driven by
-# SCP specifically, rather than by some UK-wide macro shock or measurement
-# change that happened to coincide with SCP's rollout date and would show up
-# in ANY devolved nation vs England, not just Scotland. If Wales or NI instead
-# show a significant "effect" here, that's a warning sign -- it would suggest
-# the Scotland-vs-England estimate may be partly picking up something other
-# than SCP.
-#
-# NI CAVEAT (from hbai_clean_placebo.csv's own diagnostic, see
-# 01b_hbai_prep_placebo.R): the FYE2024 MDCH old/new question-design split is
-# NOT even across nations -- NI's harmonised extract is 100% new-design in
-# that year (0% old), vs ~27-30% old-design for GB nations. If NI shows a
-# spurious "effect" here on the official MDCH flag specifically (not on the
-# homemade mdch_any/count/severe composites), check whether that's this
-# measurement artefact before reading it as a genuine confound.
-#
-# Uses hbai_clean_placebo.csv (01b_hbai_prep_placebo.R), NOT hbai_clean.csv
-# -- the main six-stage pipeline (03-09) is completely untouched by this
-# script. Scotland is NOT part of this script at all -- Scotland-vs-England
-# is already Stage 1's headline result (Section 4); this script only tests
-# the two nations that should show nothing.
+# using the same post-period cutoff (SCP's real rollout timing, 14 Nov
+# 2022 refinement / YEAR>=2023), we should find nothing.
 # ─────────────────────────────────────────────────────────────────────────────
 
 library(data.table)
@@ -56,7 +27,7 @@ MDCH_ITEMS <- c("MDCH_BED", "MDCH_CEL", "MDCH_COAT", "MDCH_EQP", "MDCH_HOL",
 
 cat("Loading data...\n")
 df <- fread(DATA_PATH)
-if (!"post" %in% names(df)) stop("`post` column not found -- rerun 01b_hbai_prep_placebo.R first.")
+if (!"post" %in% names(df)) stop("`post` column not found -- rerun 01_hbai_prep.R first.")
 df[, YEAR := as.integer(YEAR)]
 df[, post := as.numeric(post)]   # SCP's REAL rollout timing -- exact 14-Nov-2022 refinement where
                                   # available. This is what makes it a meaningful falsification test:
