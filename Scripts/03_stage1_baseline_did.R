@@ -735,20 +735,42 @@ if (nrow(item_es) > 0) {
 # ─────────────────────────────────────────────────────────────────────────────
 cat("\n── Robustness: excluding FYE 2022 from pre-period ──────────────────────\n")
 
-df_rob      <- df_mdch[YEAR != 2022]
-rob_models  <- lapply(c("mdch_any", "mdch_severe"), function(y) {
-  feols(make_did_fml(y, avail_covs), data = df_rob, weights = ~GS_INDCH,
+# All four headline outcomes, on the same Adjusted (CASE-controls) spec used
+# throughout Stage 1b -- previously this block only covered mdch_any and
+# mdch_severe, so the "leaves the headline result unchanged" claim in the
+# write-up wasn't actually tested for the official MDCH flag itself. Extended
+# 2026-08-14 to match the age-restricted robustness table's outcome coverage.
+rob_outcomes <- list(
+  "Official MDCH flag"         = list(data = df_mdch_flag[YEAR != 2022], y = "MDCH"),
+  "Any deprivation (mdch_any)" = list(data = df_mdch[YEAR != 2022],      y = "mdch_any"),
+  "Severe deprivation"         = list(data = df_mdch[YEAR != 2022],      y = "mdch_severe"),
+  "Food insecurity"            = list(data = df_food[YEAR != 2022],      y = "food_insecure")
+)
+
+rob_models <- lapply(rob_outcomes, function(spec) {
+  feols(make_did_fml(spec$y, avail_covs), data = spec$data, weights = ~GS_INDCH,
         cluster = ~SERNUM, notes = FALSE)
 })
-names(rob_models) <- c("mdch_any", "mdch_severe")
 
 cat("Robustness estimates (FYE 2022 excluded from pre-period):\n")
 for (nm in names(rob_models)) {
   cf <- coef(rob_models[[nm]]); sv <- fixest::se(rob_models[[nm]]); pv <- fixest::pvalue(rob_models[[nm]])
   sig <- ifelse(pv[DID_TERM] < .01, "***", ifelse(pv[DID_TERM] < .05, "**",
                 ifelse(pv[DID_TERM] < .1, "*", "")))
-  cat(sprintf("  %-20s  coef=%6.4f  SE=%6.4f  %s\n", nm, cf[DID_TERM], sv[DID_TERM], sig))
+  cat(sprintf("  %-30s  coef=%6.4f  SE=%6.4f  %s\n", nm, cf[DID_TERM], sv[DID_TERM], sig))
 }
+
+# CSV companion, same format as table_age_restricted_did.csv, for the
+# write-up's robustness-checks table.
+rob_did_csv <- bind_rows(lapply(names(rob_models), function(nm) {
+  m <- rob_models[[nm]]
+  cf <- coef(m); sv <- fixest::se(m); pv <- fixest::pvalue(m); ci <- confint(m)
+  if (!DID_TERM %in% names(cf)) return(NULL)
+  data.frame(outcome = nm, coef = cf[DID_TERM], se = sv[DID_TERM], pval = pv[DID_TERM],
+             ci_lo = ci[DID_TERM, 1], ci_hi = ci[DID_TERM, 2], n_obs = nobs(m), r2 = r2(m, "r2"))
+}))
+write.csv(rob_did_csv, file.path(TABLES_DIR, "table_fye2022_excl_did.csv"), row.names = FALSE)
+cat("  ✓ FYE2022-exclusion robustness table saved (CSV)\n")
 
 # ─────────────────────────────────────────────────────────────────────────────
 # ROBUSTNESS: restrict sample to ages 6-15 (excludes Best Start overlap)

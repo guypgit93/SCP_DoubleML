@@ -2,7 +2,14 @@
 \section{Appendix}
 \label{sec:appendix}
 
-This appendix reports supporting material too detailed for the main text: a background-characteristics robustness table, item-level and item-stacked decomposition tables, parallel-trends diagnostics for outcomes other than the official MDCH flag, the full age-restricted robustness check, and a data dictionary defining every variable used.
+This appendix reports supporting material too detailed for the main text: full sample composition by year, a background-characteristics robustness table, the CASE exact-replication diagnostic, a robustness check using two alternative composite outcome definitions, the full item-stacked OLS results, machine-learning item-level decomposition tables, parallel-trends diagnostics for outcomes other than the official MDCH flag, the full age-restricted robustness check, and a data dictionary defining every variable used.
+
+\subsection{Sample composition by year}
+\label{sec:appendix-sample-composition}
+
+Table~\ref{tab:summary_sample_composition} reports the full sample composition by survey year and country underlying Section~\ref{sec:data}.
+
+\input{Tables/summary_sample_composition.tex}
 
 \subsection{Background characteristics by pre-/post-SCP period}
 \label{sec:appendix-a1-period}
@@ -11,25 +18,50 @@ Table~\ref{tab:summary_a1_by_period} decomposes the background characteristics r
 
 \input{Tables/summary_a1_by_period.tex}
 
-\subsection{Item-level and item-stacked tables}
+\subsection{CASE exact-replication specification}
+\label{sec:appendix-case-exact}
+
+Table~\ref{tab:stage1_case_exact} reports the full-coefficient CASE exact-replication diagnostic discussed in Section~\ref{sec:res-baseline}, which adds an explicit \texttt{Post} main-effect term to Equation~\ref{eq:baseline-did} and reports the complete covariate vector rather than only the treatment interaction.
+
+\input{Tables/stage1_case_exact.tex}
+
+\subsection{Robustness: alternative composite outcome definitions}
+\label{sec:appendix-composites}
+
+This paper's main analysis focuses on the official MDCH flag and its item-level decomposition (Section~\ref{sec:methodology}). Two additional composite outcomes built from the same ten items, \emph{any deprivation} (at least one item lacking) and \emph{severe deprivation} (more than five items lacking), are also estimated as a robustness check rather than as headline outcomes, since no fixed-count threshold is well established in the literature for defining severity and \citet{nicoriciuelliot2025} argue against arbitrary count thresholds altogether (Section~\ref{sec:lit-measurement}). Table~\ref{tab:stage1_composite_robustness} reports the baseline difference-in-differences results for both composites, under the same three specifications as Table~\ref{tab:stage1_composite}. Any deprivation is significant and directionally consistent with the headline MDCH-flag result throughout; severe deprivation is null, plausibly because it is rare throughout the sample (well under 2 per cent of every country-period cell; Table~\ref{tab:summary_outcomes}) rather than because SCP had no effect on severe cases specifically. At quarterly granularity, any deprivation is also flagged by the Benjamini--Hochberg-corrected Wald test (Table~\ref{tab:parallel_trends_quarterly_wald}, Appendix~\ref{sec:appendix-quarterly}); severe deprivation remains clean at quarterly level.
+
+\input{Tables/stage1_composite.tex}
+
+The Northern Ireland falsification check (Section~\ref{sec:res-placebo}) also flags one anomaly among these two composites: a significant, positive coefficient on any deprivation (Simple $0.086$, $p=0.035$; Adjusted $0.080$, $p=0.036$), of the opposite sign to Scotland's own (negative) effect, so it does not mimic or contaminate the headline estimate. Severe deprivation and the official MDCH flag both pass this check cleanly on Northern Ireland, as does every outcome on Wales (Table~\ref{tab:placebo_wales_ni}). Any deprivation is also the outcome that shows the least conservative behaviour elsewhere in this paper (Section~\ref{sec:parallel-trends}), consistent with roughly one false positive being unsurprising across the 12 comparator$\times$outcome$\times$specification cells tested here. One candidate real-world explanation, a change to Northern Ireland's own welfare "mitigations" scheme, was checked and ruled out, since that scheme was extended, not curtailed, over this period. The cause of this anomaly remains unresolved, though its opposite sign to Scotland's own effect means it has no bearing on the paper's identification of SCP's effect.
+
+\input{Tables/placebo_wales_ni.tex}
+
+\subsection{Item-stacked OLS difference-in-differences}
+\label{sec:appendix-stacked}
+
+As a check on Section~\ref{sec:res-items}'s independent item-by-item regressions, which treat each item's error term as unrelated to the others despite the same child answering all ten deprivation questions (a \citet{moulton1990} problem), the ten items are reshaped into long format and fit as a single joint model with item and year fixed effects, clustering standard errors at household level to reflect this within-child correlation directly. Both a pooled specification (one average effect across all ten items) and an item-interacted specification (one coefficient per item, with a joint Wald test of the null that all ten item-specific effects are zero) are estimated, in both Simple and Adjusted form using the same covariates as Section~\ref{sec:baseline-did}. Table~\ref{tab:stage2_stacked} reports the results in full.
+
+\input{Tables/stage2_stacked.tex}
+
+The pooled effect is small and not significant in either specification ($-0.015$, $p=0.153$ Simple; $-0.015$, $p=0.137$ Adjusted), and the joint Wald test is only marginal (Simple stat$=1.730$, $p=0.068$; Adjusted stat$=1.640$, $p=0.089$), clearing neither the conventional 5\% threshold. Two items stand out in the item-interacted specification: Celebrations ($-0.015$ Simple, $-0.016$ Adjusted, both $p<0.05$) and, more marginally, Holiday away ($-0.060$ Simple, $-0.057$ Adjusted, both $p<0.10$). Comparing this table to Table~\ref{tab:stage1_items}'s independent-regression estimates reveals a genuine methodological divergence rather than a covariate mismatch, since both tables share identical covariates: Celebrations is robust to the choice between the two approaches (independent: $-0.025$, BH-significant; stacked: $-0.016$, $p=0.043$), but Warm coat is not -- it survives Benjamini--Hochberg correction under independent regressions ($p=0.002$) yet is not significant in the pooled, household-clustered model ($p=0.264$). Since the only thing that differs between the two specifications is whether the ten items are fit as independent regressions or as one joint model accounting for within-child correlation across items, this divergence is a genuine open question about which is the more appropriate way to test a single item's effect when the same respondent answers all ten questions, rather than an artefact of specification choice.
+
+\subsection{Machine-learning item-level tables}
 \label{sec:appendix-tables}
 
-Tables~\ref{tab:stage1_items} and~\ref{tab:stage2_stacked} report the full item-level and item-stacked baseline DiD decomposition discussed in Sections~\ref{sec:res-items}--\ref{sec:res-stacked}. Tables~\ref{tab:stage4_dml_items} and~\ref{tab:stage5_stacked_ml} report the corresponding item-level and jointly stacked machine-learning DiD results discussed in Section~\ref{sec:res-item-dml}.
+Tables~\ref{tab:stage4_dml_items} and~\ref{tab:stage5_stacked_ml} report the item-level and jointly stacked machine-learning DiD results discussed in Section~\ref{sec:res-item-dml}.
 
-\input{Tables/stage1_items.tex}
-\input{Tables/stage2_stacked.tex}
 \input{Tables/stage4_dml_items.tex}
 \input{Tables/stage5_stacked_ml.tex}
 
 \subsection{Parallel-trends checks: composite outcomes and food insecurity}
 \label{sec:appendix-quarterly}
 
-Section~\ref{sec:parallel-trends} reports the official MDCH flag's parallel-trends diagnostic in the main text (Figure~\ref{fig:pt_composite}). This subsection reports the same diagnostic for the three composite outcomes and food insecurity, at both annual and quarterly granularity, the latter a finer-grained replication of the CASE evaluation's own event-study specification using rolling 13-week windows anchored on the SCP rollout date rather than annual survey-year dummies.
+Section~\ref{sec:parallel-trends} reports the official MDCH flag's parallel-trends diagnostic in the main text (Figure~\ref{fig:pt_composite}). This subsection reports the same diagnostic for the two composite outcomes and food insecurity, at both annual and quarterly granularity, the latter a finer-grained replication of the CASE evaluation's own event-study specification using rolling 13-week windows anchored on the SCP rollout date rather than annual survey-year dummies.
 
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=\textwidth]{Figures/pt_es_composite_grid.png}
-\caption{Scotland$\times$year event-study coefficients, annual granularity: official MDCH flag, the three composites, and food insecurity. Blue markers are pre-treatment years, red are post-treatment; vertical lines are 95\% confidence intervals; the dashed line marks the November 2022 rollout.}
+\caption{Scotland$\times$year event-study coefficients, annual granularity: official MDCH flag, the two composites, and food insecurity. Blue markers are pre-treatment years, red are post-treatment; vertical lines are 95\% confidence intervals; the dashed line marks the November 2022 rollout.}
 \label{fig:pt_composite_grid}
 \end{figure}
 
@@ -38,16 +70,19 @@ Section~\ref{sec:parallel-trends} reports the official MDCH flag's parallel-tren
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=\textwidth]{Figures/pt_es_quarterly_composite_grid.png}
-\caption{Scotland$\times$quarter event-study coefficients, quarterly granularity: official MDCH flag, the three composites, and food insecurity. Blue markers are pre-treatment quarters, red are post-treatment; vertical lines are 95\% confidence intervals; the dashed line marks the November 2022 rollout.}
+\caption{Scotland$\times$quarter event-study coefficients, quarterly granularity: official MDCH flag, the two composites, and food insecurity. Blue markers are pre-treatment quarters, red are post-treatment; vertical lines are 95\% confidence intervals; the dashed line marks the November 2022 rollout.}
 \label{fig:pt_composite_quarterly}
 \end{figure}
 
-\subsection{Age-restricted robustness check}
+\subsection{Robustness checks: FYE2022 exclusion, age restriction, wild-cluster bootstrap inference, and DML stability}
 \label{sec:appendix-age-restricted}
 
-Section~\ref{sec:res-robustness} summarises the age-restricted (6--15) robustness check for the official MDCH flag in the main text. Table~\ref{tab:stage1_age_restricted} reports the full results across all five outcomes.
+Section~\ref{sec:res-robustness} summarises three further robustness checks in the main text. Table~\ref{tab:fye2022_excl} reports the full results, across all four outcomes, of excluding FYE2022 from the pre-period. Table~\ref{tab:stage1_age_restricted} reports the full results, again across all four outcomes, of restricting the sample to children aged 6--15. Table~\ref{tab:wildboot} reports the wild-cluster bootstrap check on the headline Adjusted coefficient. Table~\ref{tab:dmlstability} reports a finite-sample stability check on the preferred wide-covariate random-forest DML estimate (Section~\ref{sec:disc-causal}).
 
+\input{Tables/fye2022_excl.tex}
 \input{Tables/stage1_age_restricted.tex}
+\input{Tables/wildboot_headline.tex}
+\input{Tables/dml_stability_wide_rf.tex}
 
 \subsection{Data dictionary}
 \label{sec:appendix-data-dictionary}

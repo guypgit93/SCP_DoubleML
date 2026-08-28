@@ -39,11 +39,13 @@ venv/
 *.md
 *.txt
 *.bib
+*.tex
 config.py
 Papers/
-figures/
-tables/
-latex/
+/figures/
+/tables/
+/latex/
+Sections/Tables/
 archive/
 ~$*
 testfile_delete_me.txt
