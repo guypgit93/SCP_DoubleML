@@ -1,26 +1,11 @@
 # =============================================================================
 # 05c_stage1_parallel_trends_quarterly.R
 #
-# Replicates CASE (Andersen, Nesom, Patrick, Pinter, Stewart & Tominey 2025,
-# CASE paper 238) Table A3 EXACTLY at quarterly granularity: event-study
-# models with Scot x quarter dummies, using the paper's own rolling 13-week
-# windows (anchored 14 Feb / 14 May / 14 Aug / 14 Nov each year), instead of
-# 05_stage1_parallel_trends.R's annual FYE dummies.
-#
-# NOTE: the CASE paper itself only runs its COVARIATE balance table (Table
-# A2) annually -- only the OUTCOME event-study (Table A3) is quarterly. So
-# this script only rebuilds a Table A3 equivalent; Table A2 in
-# 05_stage1_parallel_trends.R is unchanged and still correct.
-#
-# quarter_label/quarter_start/quarter_index come straight from hbai_clean.csv
-# -- 01_hbai_prep.R builds them itself (looping over every FRS year's raw
-# household file for INTDATE), so this script needs no separate merge step.
-# Just re-run 01_hbai_prep.R after any change to that logic, then this script.
-#
-# COVERAGE CAVEAT: hbai_clean.csv's earliest year (FYE2017, i.e. FY2016/17)
-# has no FRS raw download in this project, so it has no interview date and
-# drops out of this quarterly sample entirely -- the quarterly event-study
-# here starts one year later than the annual one in 05_stage1_parallel_trends.R.
+# Replicates CASE (Andersen et al. 2025, paper 238) Table A3 at quarterly
+# granularity: Scot x quarter event-study using the paper's own rolling
+# 13-week windows (anchored 14 Feb/May/Aug/Nov), instead of 05's annual FYE
+# dummies. CASE only runs Table A2 (covariates) annually, so Table A2 in
+# 05_stage1_parallel_trends.R is unaffected and still correct.
 #
 # Outputs
 #   tables/  table_A3_quarterly_composite.csv, table_A3_quarterly_items.csv,
@@ -36,7 +21,7 @@ library(modelsummary)
 library(data.table)
 library(patchwork)
 
-setFixest_dict(c(treated = "Scotland"))
+setFixest_dict(c(treated = "Scotland"))   # display label for regression tables
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CONFIG
@@ -45,7 +30,7 @@ DATA_PATH    <- "/Users/guypigott/python-venv-demo/Dissertation/data/hbai_clean.
 FIGURES_DIR  <- "/Users/guypigott/Claude/Projects/MSc Dissertation/figures"
 TABLES_DIR   <- "/Users/guypigott/Claude/Projects/MSc Dissertation/tables"
 
-dir.create(FIGURES_DIR, showWarnings = FALSE, recursive = TRUE)
+dir.create(FIGURES_DIR, showWarnings = FALSE, recursive = TRUE)   # no-op if it already exists
 dir.create(TABLES_DIR,  showWarnings = FALSE, recursive = TRUE)
 
 SCP_EXPAND_DATE <- as.Date("2022-11-14")   # under-16s expansion -- CASE's Table A3 cutoff
@@ -82,6 +67,8 @@ if (!all(c("quarter_label", "quarter_start", "quarter_index") %in% names(df))) {
 df[, YEAR := as.integer(YEAR)]
 df[, quarter_start := as.Date(quarter_start)]
 
+# Report how much of the data actually got a quarter assignment before
+# dropping the rest -- years with 0% simply have no FRS raw download here
 n_total <- nrow(df)
 n_matched <- sum(!is.na(df$quarter_label))
 cat(sprintf("  %s of %s HBAI rows (%.1f%%) have a quarter assignment.\n",
@@ -90,16 +77,16 @@ cat(sprintf("  %s of %s HBAI rows (%.1f%%) have a quarter assignment.\n",
 cat("  Match rate by year (years with 0%% have no FRS raw download in this project):\n")
 print(df[, .(matched = mean(!is.na(quarter_label))), by = YEAR][order(YEAR)])
 
-df <- df[!is.na(quarter_label)]
+df <- df[!is.na(quarter_label)]   # drop rows we couldn't assign a quarter to
 cat(sprintf("  Retained %s rows with a valid quarter assignment.\n", format(nrow(df), big.mark = ",")))
 if (nrow(df) == 0) stop("No rows matched a quarter -- check the merge before going further.")
 
 df[, treated   := as.numeric(scotland)]
-df[, quarter_f := factor(quarter_label, levels = unique(quarter_label[order(quarter_start)]))]
+df[, quarter_f := factor(quarter_label, levels = unique(quarter_label[order(quarter_start)]))]  # chronological factor levels, not alphabetical
 
 # Numeric coercion + sentinel cleanup for outcomes
 df[, MDCH := suppressWarnings(as.numeric(MDCH))]
-df[, MDCH := ifelse(MDCH < 0, NA_real_, MDCH)]
+df[, MDCH := ifelse(MDCH < 0, NA_real_, MDCH)]   # negative codes are DWP "missing" sentinels, not real values
 for (v in c(MDCH_ITEMS, "mdch_any", "mdch_count", "mdch_severe",
             "food_insecure", "very_low_food_sec")) {
   if (v %in% names(df)) df[[v]] <- suppressWarnings(as.numeric(df[[v]]))
@@ -110,7 +97,7 @@ for (v in c(MDCH_ITEMS, "mdch_any", "mdch_count", "mdch_severe",
 # 03_stage1_baseline_did.R's CASE_COVS, rebuilt here since this script loads
 # its own copy of the data.
 # ─────────────────────────────────────────────────────────────────────────────
-df[, ETH := ifelse(ETH == 99, NA_real_, ETH)]
+df[, ETH := ifelse(ETH == 99, NA_real_, ETH)]   # 99 = "not declared" -> missing
 df[, larger_fam  := as.numeric(NUMBKIDS == 3)]
 df[, lone_parent := as.numeric(MARITAL_WITHKID == 1)]
 df[, young_head  := as.numeric(AGEHDBAND == 1)]
@@ -120,16 +107,20 @@ df[, ETH_f       := factor(ETH)]
 CASE_COVS  <- c("young_head", "female_head", "ETH_f", "disabled_hh", "lone_parent", "larger_fam")
 avail_covs <- CASE_COVS[CASE_COVS %in% names(df)]
 
+# Subsamples, same logic as 05: each outcome's own module-observed/non-missing flag
 df_mdch      <- df[mdch_observed == 1 & !is.na(GS_INDCH) & GS_INDCH > 0]
 df_mdch_flag <- df[!is.na(MDCH)      & !is.na(GS_INDCH) & GS_INDCH > 0]
 df_food      <- df[!is.na(food_insecure) & !is.na(GS_INDCH) & GS_INDCH > 0]
 
-avail_items <- MDCH_ITEMS[MDCH_ITEMS %in% names(df_mdch)]
+avail_items <- MDCH_ITEMS[MDCH_ITEMS %in% names(df_mdch)]   # drop any item not present in this data pull
 
 # ─────────────────────────────────────────────────────────────────────────────
 # HELPERS -- same shape as 05_stage1_parallel_trends.R, swapping YEAR_f for
 # quarter_f and the year-based pretrend cutoff for SCP_EXPAND_DATE.
 # ─────────────────────────────────────────────────────────────────────────────
+
+# Fits one event-study-style regression: a quarter-specific Scot x quarter
+# coefficient for every quarter except `ref`, plus quarter fixed effects.
 run_trend_model <- function(data, outcome, covs = NULL, ref, weight = "GS_INDCH") {
   base <- paste0(outcome, " ~ treated + i(quarter_f, treated, ref = '", ref, "')")
   if (!is.null(covs) && length(covs) > 0) base <- paste(base, "+", paste(covs, collapse = " + "))
@@ -145,6 +136,8 @@ run_trend_model <- function(data, outcome, covs = NULL, ref, weight = "GS_INDCH"
 qmap <- unique(df[, .(quarter_label, quarter_start)])
 setkey(qmap, quarter_label)
 
+# Pulls the quarter-specific Scot x quarter coefficients out of a fitted
+# model into a tidy one-row-per-quarter data frame, flagging post-SCP quarters.
 tidy_trend <- function(fit) {
   if (is.null(fit)) return(NULL)
   broom::tidy(fit, conf.int = TRUE) |>
@@ -154,23 +147,28 @@ tidy_trend <- function(fit) {
     mutate(post = quarter_start >= SCP_EXPAND_DATE)
 }
 
+# Joint Wald test
 pretrend_wald <- function(fit, all_quarters, ref) {
   if (is.null(fit)) return(NA_real_)
   pre_labels <- qmap[quarter_start < SCP_EXPAND_DATE & quarter_label %in% all_quarters & quarter_label != ref, quarter_label]
   pre_terms <- paste0("quarter_f::", pre_labels, ":treated")
-  pre_terms <- pre_terms[pre_terms %in% names(coef(fit))]
-  if (length(pre_terms) < 2) return(NA_real_)
+  pre_terms <- pre_terms[pre_terms %in% names(coef(fit))]   # drop any quarter term the model didn't estimate
+  if (length(pre_terms) < 2) return(NA_real_)               # need at least 2 terms for a joint test to mean anything
   wt <- tryCatch(wald(fit, keep = pre_terms), error = function(e) NULL)
   if (is.null(wt)) return(NA_real_)
   wt$p
 }
 
+# Formats one coefficient + SE + significance stars into a single table cell
+# string, e.g. "-0.012*\n(0.006)" -- used to build the paper-style wide CSVs.
 fmt_cell <- function(est, se, p) {
   stars <- dplyr::case_when(p < .001 ~ "***", p < .01 ~ "**", p < .05 ~ "*", TRUE ~ "")
   out <- sprintf("%.3f%s\n(%.3f)", est, stars, se)
   ifelse(is.na(est), "-", out)
 }
 
+# Plots one outcome's Scot x quarter trend: Unadjusted and Adjusted series
+# overlaid, x-axis is actual calendar date rather than a quarter label.
 plot_outcome_trend <- function(td_unadj, td_adj, title, ylab) {
   du <- if (!is.null(td_unadj)) td_unadj |> mutate(spec = "Unadjusted") else NULL
   da <- if (!is.null(td_adj))   td_adj   |> mutate(spec = "Adjusted")   else NULL
@@ -180,7 +178,7 @@ plot_outcome_trend <- function(td_unadj, td_adj, title, ylab) {
                  colour = spec, shape = spec)) +
     geom_hline(yintercept = 0, linetype = "dashed", colour = "grey50") +
     geom_vline(xintercept = SCP_EXPAND_DATE, linetype = "dashed", colour = "firebrick", linewidth = 0.6) +
-    geom_point(position = position_dodge(width = 20), size = 2.1) +
+    geom_point(position = position_dodge(width = 20), size = 2.1) +   # dodge so Unadjusted/Adjusted don't overlap
     geom_errorbar(position = position_dodge(width = 20), width = 0) +
     scale_colour_manual(values = c("Unadjusted" = "#2c7bb6", "Adjusted" = "#e66101"), name = "") +
     scale_shape_manual(values  = c("Unadjusted" = 16, "Adjusted" = 17), name = "") +
@@ -198,6 +196,7 @@ plot_outcome_trend <- function(td_unadj, td_adj, title, ylab) {
 # ═════════════════════════════════════════════════════════════════════════════
 cat("\n== TABLE A3 (QUARTERLY): Parallel outcome trends test (event study) =======\n")
 
+# The 4 composite/headline outcomes, plus one entry per individual MDCH item
 outcome_specs <- list(
   list(key = "mdch_any",      label = "MDCH: Any deprivation",   data = df_mdch,      y = "mdch_any"),
   list(key = "mdch_severe",   label = "MDCH: Severe (>5 items)", data = df_mdch,      y = "mdch_severe"),
@@ -211,7 +210,10 @@ for (item in avail_items) {
 }
 composite_keys <- c("mdch_any", "mdch_severe", "MDCH_flag", "food_insecure")
 
+# Fit Unadjusted + Adjusted event-study models for every outcome/item above
 a3_results <- map(outcome_specs, function(spec) {
+  # Reference quarter = each outcome's own earliest available quarter (outcomes
+  # like food_insecure start their coverage later than others)
   spec_quarters <- sort(unique(spec$data$quarter_label[!is.na(spec$data$quarter_label)]))
   spec_ref <- qmap[quarter_label %in% spec_quarters][order(quarter_start)][1, quarter_label]
   cat(sprintf("  fitting: %-28s (ref quarter %s, n quarters = %d)\n", spec$label, spec_ref, length(spec_quarters)))
@@ -241,6 +243,8 @@ write_csv(a3_wald, file.path(TABLES_DIR, "table_A3_quarterly_pretrend_wald.csv")
 cat("  wrote table_A3_quarterly_pretrend_wald.csv\n")
 
 # ── Wide CSVs (paper-style: unadjusted + adjusted columns per outcome) ──────
+# Reshapes one set of outcomes (composites, or items) into one row per
+# quarter, with an Unadjusted and Adjusted column per outcome.
 build_wide_table <- function(keys) {
   long_df <- map_dfr(keys, function(k) {
     r <- a3_results[[k]]
@@ -282,7 +286,7 @@ if (nrow(a3_items_wide) > 0) {
 composite_labels <- vapply(a3_results[composite_keys], `[[`, character(1), "label")
 
 unadj_list <- map(a3_results[composite_keys], "unadj")
-unadj_ok   <- !vapply(unadj_list, is.null, logical(1))
+unadj_ok   <- !vapply(unadj_list, is.null, logical(1))   # drop any composite whose model failed
 composite_unadj_fits <- unadj_list[unadj_ok]
 names(composite_unadj_fits) <- composite_labels[unadj_ok]
 
@@ -333,6 +337,8 @@ for (r in a3_results) {
     ggsave(file.path(FIGURES_DIR, paste0("pt_es_quarterly_", r$key, ".png")), p, width = 9, height = 5, dpi = 150)
     cat(sprintf("  wrote pt_es_quarterly_%s.png\n", r$key))
   }
+  # Route each outcome's unadjusted series into the composite grid or the
+  # items grid below, depending on which kind of outcome it is
   if (r$key %in% composite_keys) {
     if (!is.null(r$td_unadj)) composite_grid_rows[[r$key]] <- r$td_unadj |> mutate(outcome = r$label)
   } else {
@@ -347,7 +353,7 @@ if (length(composite_grid_rows) > 0) {
     geom_vline(xintercept = SCP_EXPAND_DATE, linetype = "dashed", colour = "firebrick", alpha = .7) +
     geom_point(size = 1.4) + geom_errorbar(width = 0) +
     scale_colour_manual(values = c("FALSE" = "#2c7bb6", "TRUE" = "#d7191c"), guide = "none") +
-    facet_wrap(~outcome, ncol = 3, scales = "free_y") +
+    facet_wrap(~outcome, ncol = 3, scales = "free_y") +   # one small panel per outcome
     labs(title = "Table A3 replication (quarterly): composite MDCH & food insecurity trends (unadjusted)",
          x = "Quarter start date", y = "Scot x quarter coefficient") +
     theme_minimal(base_size = 9) + theme(strip.text = element_text(face = "bold"),

@@ -5,14 +5,6 @@
 # no controls) and Table A3 (parallel outcome trends / event study: Scot x
 # Year interactions for MDCH, its components, and food insecurity).
 #
-# Runs both tables at annual (FYE) granularity throughout, not the paper's
-# ~13-week quarters -- HBAI's harmonised extract doesn't carry interview
-# date for most years (see 01_hbai_prep.R).
-#
-# Table A2 covariate definitions match 02_summary_stats.R (confirmed against
-# CASE Table 2 / A1), not the archived version which used different raw
-# variables that turned out degenerate for this data pull.
-#
 # Outputs
 #   tables/  table_A2_covariate_trends.{csv,tex}, table_A2_pretrend_wald.csv
 #            table_A3_composite.csv, table_A3_composite_{un,}adjusted.tex
@@ -20,9 +12,6 @@
 #   figures/ pt_covtrend_<covariate>.png (x6), pt_covtrend_grid.png
 #            pt_es_<outcome>.png (composite x5, items x10)
 #            pt_es_composite_grid.png, pt_es_items_grid.png
-#
-# Run after 01_hbai_prep.R has produced hbai_clean.csv. Loads its own copy of
-# the data, so it can be run independently of 03/04.
 # ─────────────────────────────────────────────────────────────────────────────
 
 library(fixest)
@@ -31,7 +20,7 @@ library(modelsummary)
 library(data.table)
 library(patchwork)
 
-setFixest_dict(c(treated = "Scotland"))
+setFixest_dict(c(treated = "Scotland"))   # display label for regression tables
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CONFIG
@@ -40,7 +29,7 @@ DATA_PATH   <- "/Users/guypigott/python-venv-demo/Dissertation/data/hbai_clean.c
 FIGURES_DIR <- "/Users/guypigott/Claude/Projects/MSc Dissertation/figures"
 TABLES_DIR  <- "/Users/guypigott/Claude/Projects/MSc Dissertation/tables"
 
-dir.create(FIGURES_DIR, showWarnings = FALSE, recursive = TRUE)
+dir.create(FIGURES_DIR, showWarnings = FALSE, recursive = TRUE)   # no-op if it already exists
 dir.create(TABLES_DIR,  showWarnings = FALSE, recursive = TRUE)
 
 SCP_EXPAND_YEAR <- 2023   # FY 2022/23: SCP expanded to all under-16s, £25/week
@@ -51,8 +40,8 @@ MDCH_ITEMS <- c("MDCH_BED", "MDCH_CEL", "MDCH_COAT", "MDCH_EQP", "MDCH_HOL",
 
 MDCH_LABELS <- c(
   # Labels corrected 2026-07-28 against the official HBAI item wording (see
-  # 03_stage1_baseline_did.R's header for the full rationale) -- MDCH_TEA,
-  # MDCH_EQP and MDCH_PLAY were factually wrong, not just imprecise.
+  # 03_stage1_baseline_did.R's header) -- MDCH_TEA, MDCH_EQP and MDCH_PLAY
+  # were factually wrong, not just imprecise.
   MDCH_BED  = "Bed / bedroom",
   MDCH_CEL  = "Celebrations",
   MDCH_COAT = "Warm coat",
@@ -75,7 +64,11 @@ cat(sprintf("  Raw: %s rows, years: %s\n", format(nrow(df), big.mark = ","),
 
 df[, YEAR      := as.integer(YEAR)]
 df[, treated   := as.numeric(scotland)]
-df[, YEAR_f    := factor(YEAR)]
+df[, YEAR_f    := factor(YEAR)]        # factor version of YEAR, needed for i()/FE syntax below
+# Built here for 05b_stage1_pretrend_diagnostics.R, which reuses df_a2 (and
+# therefore this column) to test region-clustered vs. household-clustered
+# inference -- NOT used in this script's own models, which cluster at SERNUM
+# throughout (see run_trend_model() below).
 df[, GVTREGN_f := factor(GVTREGN)]
 
 REF_YEAR <- min(df$YEAR, na.rm = TRUE)   # earliest observed FYE (matches paper's ref category)
@@ -83,30 +76,18 @@ cat(sprintf("  Reference year for all trend regressions: FYE %s\n", REF_YEAR))
 
 # Numeric coercion + sentinel cleanup for outcomes
 df[, MDCH := suppressWarnings(as.numeric(MDCH))]
-df[, MDCH := ifelse(MDCH < 0, NA_real_, MDCH)]
+df[, MDCH := ifelse(MDCH < 0, NA_real_, MDCH)]   # negative codes are DWP "missing" sentinels, not real values
 for (v in c(MDCH_ITEMS, "mdch_any", "mdch_count", "mdch_severe",
             "food_insecure", "very_low_food_sec")) {
   if (v %in% names(df)) df[[v]] <- suppressWarnings(as.numeric(df[[v]]))
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# COVARIATES -- built here, BEFORE any subsample is sliced off df below, since
-# data.table subsets are snapshots: columns added to df afterward would
-# silently not appear in df_a2/df_mdch/df_mdch_flag/df_food (this is the same
-# ordering bug that broke 03_stage1_baseline_did.R's first run).
-#
-# Table A2 covariate definitions match 02_summary_stats.R (confirmed against
-# CASE Table 2 / A1):
-#   NUMBKIDS         == 3  -> larger family (3+ children)
-#   MARITAL_WITHKID  == 1  -> lone parent
-#   AGEHDBAND        == 1  -> young head (16-24)
-#   SEXHD            == 2  -> female head
-#   DSCORFAM         == 2  -> disabled household
-#   ETH              == 1  -> white household (99 = "not declared" -> NA first)
-# ETH_f (5-category factor) is additionally built here -- not used in Table A2
-# (which follows the paper's "% white" balance-table convention) but needed
-# for Table A3's Adjusted spec, which uses CASE (2025)'s actual six controls
-# (ethnicity enters as all five categories there, not just white/non-white).
+# COVARIATES -- Definitions match 02_summary_stats.R: larger family (3+ kids), 
+# lone parent, young head (16-24), female head, disabled household, 
+# white household (99 -> NA first).
+# ETH_f (5-category factor) is also built here for Table A3's Adjusted spec,
+# which uses all five ethnicity categories, not just white/non-white.
 # ─────────────────────────────────────────────────────────────────────────────
 df[, ETH := ifelse(ETH == 99, NA_real_, ETH)]
 
@@ -119,9 +100,9 @@ df[, white_hh    := as.numeric(ETH == 1)]
 df[, ETH_f       := factor(ETH)]
 
 # ── Subsamples (FYE 2024 kept everywhere -- same MDCH definition as earlier years) ──
-df_a2        <- df[!is.na(MDCH) & !is.na(GS_INDCH) & GS_INDCH > 0]
-df_mdch      <- df[mdch_observed == 1 & !is.na(GS_INDCH) & GS_INDCH > 0]
-df_mdch_flag <- df[!is.na(MDCH)      & !is.na(GS_INDCH) & GS_INDCH > 0]
+df_a2        <- df[!is.na(MDCH) & !is.na(GS_INDCH) & GS_INDCH > 0]        # Table A2 (covariate trends) sample
+df_mdch      <- df[mdch_observed == 1 & !is.na(GS_INDCH) & GS_INDCH > 0]  # MDCH item battery observed
+df_mdch_flag <- df[!is.na(MDCH)      & !is.na(GS_INDCH) & GS_INDCH > 0]   # official DWP flag
 df_food      <- df[!is.na(food_insecure) & !is.na(GS_INDCH) & GS_INDCH > 0]
 
 cat(sprintf("  Table A2 sample:        %s rows (years %s-%s)\n",
@@ -132,18 +113,16 @@ cat(sprintf("  Food insecurity sample: %s rows\n", format(nrow(df_food), big.mar
 
 # ─────────────────────────────────────────────────────────────────────────────
 # MDCH QUESTION-REVISION CHECK: DWP split FYE2024 between old/revised MDCH
-# questions. Checks this split isn't differential across countries (an
-# assumption the CASE paper relies on). "Got old questions" proxy = ANY of
-# the 10 old-style items non-missing (a single-item check badly undercounts).
+# questions. Checks this split isn't differential across countries.
 # ─────────────────────────────────────────────────────────────────────────────
 cat("\n== MDCH question-revision check (FYE2024 old vs. new questions) ============\n")
 
-d24 <- df_mdch[YEAR == max(df$YEAR, na.rm = TRUE)]
+d24 <- df_mdch[YEAR == max(df$YEAR, na.rm = TRUE)]   # latest year only (FYE2024, the transition year)
 d24[, got_old_questions := as.numeric(rowSums(!is.na(d24[, ..MDCH_ITEMS])) > 0)]
 
 revision_tab   <- table(scotland = d24$treated, old_questions = d24$got_old_questions)
-revision_props <- prop.table(revision_tab, 1)
-revision_test  <- chisq.test(revision_tab)
+revision_props <- prop.table(revision_tab, 1)          # row proportions: within each country, share old vs. new
+revision_test  <- chisq.test(revision_tab)              # independence test: is the split related to country?
 
 cat("  Counts (rows = country, cols = 0/1 got old questions):\n")
 print(revision_tab)
@@ -167,10 +146,10 @@ revision_summary <- tibble(
 write_csv(revision_summary, file.path(TABLES_DIR, "table_mdch_revision_check.csv"))
 cat("  wrote table_mdch_revision_check.csv\n")
 
-avail_items <- MDCH_ITEMS[MDCH_ITEMS %in% names(df_mdch)]
+avail_items <- MDCH_ITEMS[MDCH_ITEMS %in% names(df_mdch)]   # drop any item not present in this data pull
 
 # ─────────────────────────────────────────────────────────────────────────────
-# TABLE A2 COVARIATE DIAGNOSTICS -- sanity-check the dummies built above
+# TABLE A2 COVARIATE DIAGNOSTICS -- check the dummies built above
 # (before the subsamples) still look non-degenerate in this subsample.
 # ─────────────────────────────────────────────────────────────────────────────
 cat("\n--- Table A2 covariate diagnostics (sanity-check before trusting results) ---\n")
@@ -198,13 +177,7 @@ TABLE_A2_VARS <- c(
 )
 
 # Adjusted-column controls for Table A3 -- CASE (Andersen et al. 2025) paper's
-# actual six controls (footnote iii), identical construction to
-# 03_stage1_baseline_did.R's CASE_COVS / 04_stage2_item_did.R /
-# 06_stage3_dml_lean.R. Reuses the dummies already built above for Table A2
-# (young_head, female_head, disabled_hh, lone_parent, larger_fam) plus the
-# 5-category ethnicity factor (ETH_f) -- NOT the old ad-hoc demographic/
-# income/housing set. See 03's COVARIATES section for the mediator/bad-
-# control rationale for excluding income and benefit-receipt.
+# actual six controls
 CASE_COVS  <- c("young_head", "female_head", "ETH_f", "disabled_hh", "lone_parent", "larger_fam")
 avail_covs <- CASE_COVS[CASE_COVS %in% names(df)]
 
@@ -212,6 +185,9 @@ avail_covs <- CASE_COVS[CASE_COVS %in% names(df)]
 # HELPERS
 # outcome ~ treated + i(YEAR_f, treated, ref) [+ covs] | YEAR_f
 # ─────────────────────────────────────────────────────────────────────────────
+
+# Fits one event-study-style regression: a year-specific Scot x Year
+# coefficient for every year except `ref`, plus year fixed effects.
 run_trend_model <- function(data, outcome, covs = NULL, ref = REF_YEAR, weight = "GS_INDCH") {
   base <- paste0(outcome, " ~ treated + i(YEAR_f, treated, ref = '", ref, "')")
   if (!is.null(covs) && length(covs) > 0) base <- paste(base, "+", paste(covs, collapse = " + "))
@@ -225,6 +201,8 @@ run_trend_model <- function(data, outcome, covs = NULL, ref = REF_YEAR, weight =
   )
 }
 
+# Pulls the year-specific Scot x Year coefficients out of a fitted model into
+# a tidy one-row-per-year data frame, flagging which years are post-SCP.
 tidy_trend <- function(fit) {
   if (is.null(fit)) return(NULL)
   broom::tidy(fit, conf.int = TRUE) |>
@@ -233,17 +211,20 @@ tidy_trend <- function(fit) {
            post = year >= SCP_EXPAND_YEAR)
 }
 
+# Joint Wald test
 pretrend_wald <- function(fit, all_years, ref = REF_YEAR) {
   if (is.null(fit)) return(NA_real_)
   pre_years <- setdiff(as.character(sort(all_years[all_years < SCP_EXPAND_YEAR])), as.character(ref))
   pre_terms <- paste0("YEAR_f::", pre_years, ":treated")
-  pre_terms <- pre_terms[pre_terms %in% names(coef(fit))]
-  if (length(pre_terms) < 2) return(NA_real_)
+  pre_terms <- pre_terms[pre_terms %in% names(coef(fit))]   # drop any year term the model didn't estimate
+  if (length(pre_terms) < 2) return(NA_real_)               # need at least 2 terms for a joint test to mean anything
   wt <- tryCatch(wald(fit, keep = pre_terms), error = function(e) NULL)
   if (is.null(wt)) return(NA_real_)
   wt$p
 }
 
+# Formats one coefficient + SE + significance stars into a single table cell
+# string, e.g. "-0.012*\n(0.006)" -- used to build the paper-style wide CSVs.
 fmt_cell <- function(est, se, p) {
   # Vectorised -- est/se/p are whole columns when called from mutate()
   stars <- dplyr::case_when(p < .001 ~ "***", p < .01 ~ "**", p < .05 ~ "*", TRUE ~ "")
@@ -251,16 +232,18 @@ fmt_cell <- function(est, se, p) {
   ifelse(is.na(est), "-", out)
 }
 
+# Plots one covariate's Scot x Year trend (Table A2 style): a single series,
+# coloured by pre/post SCP.
 plot_trend <- function(td, title, ylab, ref = REF_YEAR) {
   ggplot(td, aes(x = year, y = estimate, ymin = conf.low, ymax = conf.high,
                  colour = post, fill = post)) +
-    geom_hline(yintercept = 0, linetype = "dashed", colour = "grey50") +
+    geom_hline(yintercept = 0, linetype = "dashed", colour = "grey50") +         # null-effect reference line
     geom_vline(xintercept = SCP_EXPAND_YEAR - 0.5, linetype = "dashed",
-               colour = "firebrick", linewidth = 0.6) +
+               colour = "firebrick", linewidth = 0.6) +                         # marks the SCP rollout
     geom_ribbon(alpha = .15, colour = NA) +
     geom_point(size = 2.3) +
     geom_errorbar(width = 0.2) +
-    annotate("point", x = ref, y = 0, size = 3, shape = 1, colour = "grey40") +
+    annotate("point", x = ref, y = 0, size = 3, shape = 1, colour = "grey40") + # reference year, fixed at 0 by construction
     scale_colour_manual(values = c("FALSE" = "#2c7bb6", "TRUE" = "#d7191c"),
                         labels = c("Pre-SCP", "Post-SCP"), name = "") +
     scale_fill_manual(  values = c("FALSE" = "#2c7bb6", "TRUE" = "#d7191c"),
@@ -274,6 +257,8 @@ plot_trend <- function(td, title, ylab, ref = REF_YEAR) {
           plot.title = element_text(face = "bold", size = 10))
 }
 
+# Plots one outcome's Scot x Year trend (Table A3 style): Unadjusted and
+# Adjusted series overlaid, so the effect of adding covariates is visible.
 plot_outcome_trend <- function(td_unadj, td_adj, title, ylab, ref = REF_YEAR) {
   du <- if (!is.null(td_unadj)) td_unadj |> mutate(spec = "Unadjusted") else NULL
   da <- if (!is.null(td_adj))   td_adj   |> mutate(spec = "Adjusted")   else NULL
@@ -284,7 +269,7 @@ plot_outcome_trend <- function(td_unadj, td_adj, title, ylab, ref = REF_YEAR) {
     geom_hline(yintercept = 0, linetype = "dashed", colour = "grey50") +
     geom_vline(xintercept = SCP_EXPAND_YEAR - 0.5, linetype = "dashed",
                colour = "firebrick", linewidth = 0.6) +
-    geom_point(position = position_dodge(width = 0.3), size = 2.3) +
+    geom_point(position = position_dodge(width = 0.3), size = 2.3) +   # dodge so Unadjusted/Adjusted don't overlap
     geom_errorbar(position = position_dodge(width = 0.3), width = 0.2) +
     annotate("point", x = ref, y = 0, size = 3, shape = 1, colour = "grey40") +
     scale_colour_manual(values = c("Unadjusted" = "#2c7bb6", "Adjusted" = "#e66101"), name = "") +
@@ -304,9 +289,9 @@ plot_outcome_trend <- function(td_unadj, td_adj, title, ylab, ref = REF_YEAR) {
 # ═════════════════════════════════════════════════════════════════════════════
 cat("\n== TABLE A2: Parallel covariate trends test ================================\n")
 
-a2_fits <- lapply(names(TABLE_A2_VARS), function(v) run_trend_model(df_a2, v))
+a2_fits <- lapply(names(TABLE_A2_VARS), function(v) run_trend_model(df_a2, v))   # one model per covariate
 names(a2_fits) <- names(TABLE_A2_VARS)
-a2_fits_ok <- Filter(Negate(is.null), a2_fits)
+a2_fits_ok <- Filter(Negate(is.null), a2_fits)   # drop any covariate whose model failed to fit
 
 if (length(a2_fits_ok) == 0) {
   cat("  ! ALL Table A2 models failed to fit -- skipping Table A2 outputs for this run.\n")
@@ -324,7 +309,7 @@ if (nrow(a2_tidy) > 0) {
   a2_wide <- a2_tidy |>
     mutate(cell = fmt_cell(estimate, std.error, p.value)) |>
     select(year, covariate, cell) |>
-    pivot_wider(names_from = covariate, values_from = cell) |>
+    pivot_wider(names_from = covariate, values_from = cell) |>   # one column per covariate
     arrange(year)
   write_csv(a2_wide, file.path(TABLES_DIR, "table_A2_covariate_trends.csv"))
   cat("  wrote table_A2_covariate_trends.csv\n")
@@ -352,6 +337,7 @@ if (length(a2_fits_ok) > 0) {
   })
 }
 
+# Joint pre-trend Wald test, one per covariate
 a2_wald <- imap_dfr(a2_fits, function(fit, v) {
   tibble(covariate = TABLE_A2_VARS[[v]], wald_p = pretrend_wald(fit, unique(df_a2$YEAR)))
 }) |>
@@ -374,7 +360,7 @@ if (nrow(a2_tidy) > 0) {
     geom_vline(xintercept = SCP_EXPAND_YEAR - 0.5, linetype = "dashed", colour = "firebrick", alpha = .7) +
     geom_point(size = 1.6) + geom_errorbar(width = .3) +
     scale_colour_manual(values = c("FALSE" = "#2c7bb6", "TRUE" = "#d7191c"), guide = "none") +
-    facet_wrap(~covariate, ncol = 3, scales = "free_y") +
+    facet_wrap(~covariate, ncol = 3, scales = "free_y") +   # one small panel per covariate
     labs(title = "Table A2 replication: parallel covariate trends",
          x = "Financial year ending", y = "Scot x Year coefficient") +
     theme_minimal(base_size = 9) + theme(strip.text = element_text(face = "bold"))
@@ -387,6 +373,7 @@ if (nrow(a2_tidy) > 0) {
 # ═════════════════════════════════════════════════════════════════════════════
 cat("\n== TABLE A3: Parallel outcome trends test (event study) ====================\n")
 
+# The 4 composite/headline outcomes, plus one entry per individual MDCH item
 outcome_specs <- list(
   list(key = "mdch_any",      label = "MDCH: Any deprivation",   data = df_mdch,      y = "mdch_any"),
   list(key = "mdch_severe",   label = "MDCH: Severe (>5 items)", data = df_mdch,      y = "mdch_severe"),
@@ -400,6 +387,7 @@ for (item in avail_items) {
 }
 composite_keys <- c("mdch_any", "mdch_severe", "MDCH_flag", "food_insecure")
 
+# Fit Unadjusted + Adjusted event-study models for every outcome/item above
 a3_results <- map(outcome_specs, function(spec) {
   # Reference year must exist in this outcome's own subsample (food_insecure
   # starts later than the global REF_YEAR)
@@ -430,7 +418,9 @@ a3_wald <- map_dfr(a3_results, function(r) {
 write_csv(a3_wald, file.path(TABLES_DIR, "table_A3_pretrend_wald.csv"))
 cat("  wrote table_A3_pretrend_wald.csv\n")
 
-# ── Wide CSVs (paper-style: unadjusted + adjusted columns per outcome) ──────
+# ── Wide CSVs ──────
+# Reshapes one set of outcomes (composites, or items) into one row per year,
+# with an Unadjusted and Adjusted column per outcome.
 build_wide_table <- function(keys) {
   long_df <- map_dfr(keys, function(k) {
     r <- a3_results[[k]]
@@ -472,7 +462,7 @@ if (nrow(a3_items_wide) > 0) {
 composite_labels <- vapply(a3_results[composite_keys], `[[`, character(1), "label")
 
 unadj_list  <- map(a3_results[composite_keys], "unadj")
-unadj_ok    <- !vapply(unadj_list, is.null, logical(1))
+unadj_ok    <- !vapply(unadj_list, is.null, logical(1))   # drop any composite whose model failed
 composite_unadj_fits <- unadj_list[unadj_ok]
 names(composite_unadj_fits) <- composite_labels[unadj_ok]
 
@@ -518,7 +508,7 @@ if (length(composite_adj_fits) > 0) {
   })
 }
 
-# ── Figures: one per outcome (unadjusted + adjusted overlaid) ───────────────
+# ── Figures one per outcome (unadjusted + adjusted overlaid) ───────────────
 composite_grid_rows <- list()
 items_grid_rows     <- list()
 
@@ -529,6 +519,8 @@ for (r in a3_results) {
     ggsave(file.path(FIGURES_DIR, paste0("pt_es_", r$key, ".png")), p, width = 8, height = 5, dpi = 150)
     cat(sprintf("  wrote pt_es_%s.png\n", r$key))
   }
+  # Route each outcome's unadjusted series into the composite grid or the
+  # items grid below, depending on which kind of outcome it is
   if (r$key %in% composite_keys) {
     if (!is.null(r$td_unadj)) composite_grid_rows[[r$key]] <- r$td_unadj |> mutate(outcome = r$label)
   } else {

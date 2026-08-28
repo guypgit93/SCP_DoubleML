@@ -1,18 +1,11 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # 05b_stage1_pretrend_diagnostics.R
-# Diagnoses why 05_stage1_parallel_trends.R's Wald tests flag almost every covariate
-# and outcome as "possible pre-trend", including demographic variables with
-# no plausible policy-related trend.
-#
-# Leading hypothesis: a clustering artifact, not genuine divergence.
-# run_trend_model() clusters at GVTREGN_f (~10 regions, Scotland the only
-# treated one) -- cluster-robust inference is unreliable with this few
-# clusters and a single treated cluster (Cameron & Miller 2015; MacKinnon &
-# Webb). The CASE paper this replicates never clusters at region level.
-#
-# Requires 05_stage1_parallel_trends.R already run in the same session (reuses
-# df_a2, df_mdch, df_mdch_flag, run_trend_model(), pretrend_wald(),
-# TABLE_A2_VARS, REF_YEAR, TABLES_DIR, FIGURES_DIR, etc.)
+# Diagnoses why 05_stage1_parallel_trends.R's Wald tests flag almost every
+# covariate/outcome as "possible pre-trend", including ones with no
+# plausible policy-related trend. Leading hypothesis. Region clustering
+# (~10 regions, Scotland the only treated one) is anti-conservative with
+# this few clusters (Cameron & Miller 2015; MacKinnon & Webb) -- the CASE
+# paper never clusters at region level.
 #
 # Outputs
 #   tables/  table_pretrend_cluster_structure.csv
@@ -21,6 +14,8 @@
 #   figures/ pt_diag_placebo_distribution.png
 # ─────────────────────────────────────────────────────────────────────────────
 
+# Fail fast with a clear message rather than a cryptic "object not found"
+# error partway through.
 stopifnot(
   "Run 05_stage1_parallel_trends.R first (df_a2 not found)"        = exists("df_a2"),
   "Run 05_stage1_parallel_trends.R first (df_mdch not found)"      = exists("df_mdch"),
@@ -39,6 +34,7 @@ cat("═════════════════════════
 
 # ─────────────────────────────────────────────────────────────────────────────
 # DIAGNOSTIC 1: cluster structure
+# How many GVTREGN regions are there, and how many are actually treated?
 # ─────────────────────────────────────────────────────────────────────────────
 cat("\n== DIAGNOSTIC 1: Cluster structure (GVTREGN) ================================\n")
 
@@ -46,7 +42,7 @@ cluster_tab <- df_a2[, .(n_obs = .N), by = .(GVTREGN, treated)][order(treated, G
 print(cluster_tab)
 
 n_clusters         <- length(unique(df_a2$GVTREGN))
-n_treated_clusters <- length(unique(df_a2[treated == 1]$GVTREGN))
+n_treated_clusters <- length(unique(df_a2[treated == 1]$GVTREGN))   # should be 1 (Scotland only)
 n_control_clusters <- length(unique(df_a2[treated == 0]$GVTREGN))
 
 cat(sprintf(
@@ -63,12 +59,13 @@ write_csv(cluster_tab, file.path(TABLES_DIR, "table_pretrend_cluster_structure.c
 cat("wrote table_pretrend_cluster_structure.csv\n")
 
 # ─────────────────────────────────────────────────────────────────────────────
-# DIAGNOSTIC 2: does the flag survive under alternative SE specs? Refit a
-# representative set of covariates/outcomes region-clustered, hetero-robust,
-# and household-clustered (SERNUM -- far more clusters).
+# DIAGNOSTIC 2: does the flag survive under alternative SE specs?
 # ─────────────────────────────────────────────────────────────────────────────
 cat("\n== DIAGNOSTIC 2: Pre-trend Wald flag under alternative SE specs ============\n")
 
+# Same event-study spec as 05's run_trend_model(), but takes an arbitrary
+# vcov spec instead of always clustering at SERNUM -- lets us compare region-
+# clustered vs. hetero-robust vs. household-clustered inference side by side.
 run_trend_model_vcov <- function(data, outcome, vcov_spec, covs = NULL,
                                   ref = REF_YEAR, weight = "GS_INDCH") {
   base <- paste0(outcome, " ~ treated + i(YEAR_f, treated, ref = '", ref, "')")
@@ -96,6 +93,8 @@ if (!has_sernum) {
 
 alt_vcov_rows <- list()
 
+# For each covariate, refit under region-clustered / hetero-robust / household-
+# clustered SEs and record the resulting pre-trend Wald p-value under each
 for (cov_var in names(diag_covariates)) {
   d <- df_a2
   fit_region <- run_trend_model_vcov(d, cov_var, ~GVTREGN_f)
@@ -110,6 +109,7 @@ for (cov_var in names(diag_covariates)) {
   )
 }
 
+# Same comparison, but for the three representative outcomes instead of covariates
 for (spec in diag_outcomes) {
   spec_ref <- min(spec$data$YEAR, na.rm = TRUE)
   fit_region <- run_trend_model_vcov(spec$data, spec$y, ~GVTREGN_f, ref = spec_ref)
@@ -162,6 +162,8 @@ for (spec in placebo_outcomes) {
   real_fit <- run_trend_model_vcov(spec$data, spec$y, ~GVTREGN_f, ref = spec_ref)
   real_p   <- pretrend_wald(real_fit, unique(spec$data$YEAR), ref = spec_ref)
 
+  # Relabel each English region in turn as the "fake-treated" unit, refit, and
+  # record its own pre-trend Wald p-value as one placebo draw
   for (r in england_regions) {
     d_placebo <- copy(d_full)
     d_placebo[, treated := as.numeric(GVTREGN == r)]
@@ -194,10 +196,10 @@ print(placebo_summary)
 # near 50 = looks like a typical single-region draw
 
 p_placebo <- ggplot(placebo_tab, aes(x = wald_p, fill = is_real_scotland)) +
-  geom_histogram(data = filter(placebo_tab, !is_real_scotland), bins = 15, alpha = 0.7) +
+  geom_histogram(data = filter(placebo_tab, !is_real_scotland), bins = 15, alpha = 0.7) +   # distribution of placebo draws
   geom_vline(data = filter(placebo_tab, is_real_scotland),
-             aes(xintercept = wald_p), colour = "firebrick", linewidth = 1, linetype = "dashed") +
-  geom_vline(xintercept = ALPHA, colour = "grey40", linetype = "dotted") +
+             aes(xintercept = wald_p), colour = "firebrick", linewidth = 1, linetype = "dashed") +  # actual Scotland result
+  geom_vline(xintercept = ALPHA, colour = "grey40", linetype = "dotted") +                          # conventional 5% cutoff
   facet_wrap(~outcome, scales = "free_y") +
   scale_fill_manual(values = c("FALSE" = "#2c7bb6"), guide = "none") +
   labs(title = "Placebo test: joint pre-trend Wald p-value by fake-treated region",
@@ -214,10 +216,7 @@ cat("wrote pt_diag_placebo_distribution.png\n")
 # (Scotland, under GVTREGN clustering), the wild cluster bootstrap typically
 # never rejects at any conventional level -- so this is expected to look
 # conservative regardless of the true pre-trends, and does NOT fix the
-# single-treated-cluster problem the way household clustering does. Shown
-# alongside household clustering for comparison, not as a replacement.
-#
-# Requires: install.packages("fwildclusterboot")
+# single-treated-cluster problem the way household clustering does. 
 # ─────────────────────────────────────────────────────────────────────────────
 cat("\n== DIAGNOSTIC 4: Wild cluster bootstrap (region-level, joint test) =========\n")
 
@@ -240,6 +239,8 @@ mboot_joint_pretrend <- function(fit, all_years, ref, clustid = "GVTREGN_f",
   cn <- names(coef(fit))
   pre_terms <- pre_terms[pre_terms %in% cn]
   if (length(pre_terms) < 2) return(NA_real_)
+  # Build the linear restriction matrix R %*% beta = r for "all pre-period
+  # terms jointly zero" -- one row per pre-period term, a 1 in that term's column
   R <- matrix(0, nrow = length(pre_terms), ncol = length(cn))
   for (i in seq_along(pre_terms)) R[i, which(cn == pre_terms[i])] <- 1
   r <- rep(0, length(pre_terms))
@@ -249,8 +250,7 @@ mboot_joint_pretrend <- function(fit, all_years, ref, clustid = "GVTREGN_f",
     error = function(e) { message("  ! mboottest failed: ", e$message); NULL }
   )
   if (is.null(res)) return(NA_real_)
-  # Field name for the bootstrap p-value has varied across package versions --
-  # try the common ones defensively rather than hard-coding a single path.
+  # Field name for the bootstrap p-value has varied across package versions.
   p_val <- tryCatch(res$p_val, error = function(e) NULL)
   if (is.null(p_val) || length(p_val) == 0) p_val <- tryCatch(summary(res)$p_val, error = function(e) NA_real_)
   as.numeric(p_val)
@@ -274,6 +274,8 @@ if (wild_boot_available) {
   }
   wild_boot_tab <- bind_rows(wild_boot_rows) |> mutate(wald_p_wildboot_region = round(wald_p_wildboot_region, 4))
 } else {
+  # Package not installed -- still write a table (all-NA column) so downstream
+  # joins/outputs don't break just because this optional diagnostic was skipped
   wild_boot_tab <- tibble(
     outcome = c(unname(diag_covariates), map_chr(diag_outcomes, "label")),
     wald_p_wildboot_region = NA_real_
