@@ -17,8 +17,6 @@
 # Outputs
 #   tables/  — modelsummary regression tables (.tex and .docx)
 #   figures/ — event study plots (.png)
-#
-# Run after 01_hbai_prep.R has produced hbai_clean.csv
 # ─────────────────────────────────────────────────────────────────────────────
 
 library(fixest)
@@ -27,18 +25,10 @@ library(modelsummary)
 library(data.table)
 library(patchwork)
 
-# etable() is built into fixest — no extra install needed.
 # setFixest_dict() maps internal variable names to display labels.
 setFixest_dict(c(
   tp      = "DiD (Scotland x Post)",
   treated = "Scotland",
-  # Label describes intent, not a guarantee -- `post` is built in
-  # 01_hbai_prep.R as YEAR>=2023 for every year EXCEPT FYE2023, which is
-  # overwritten using real FRS household interview dates against the exact
-  # 14-Nov-2022 SCP full-rollout cutoff (see that script's "FY2022/23 rows
-  # reclassified" console line to confirm the merge succeeded when the CSV
-  # was last built -- if it silently fell back to FY-only, this label would
-  # be wrong and `post` would just mean YEAR>=2023 with no sub-year precision).
   post    = "Post (14-Nov-2022 cutoff)"
 ))
 
@@ -58,15 +48,6 @@ ALPHA      <- 0.05
 MDCH_ITEMS <- c("MDCH_BED", "MDCH_CEL", "MDCH_COAT", "MDCH_EQP", "MDCH_HOL",
                 "MDCH_PLAY", "MDCH_PLY",  "MDCH_TEA",  "MDCH_TRP", "MDCH_VEG")
 
-# Labels corrected 2026-07-28 against the official HBAI item wording in
-# 5828_hbai_2425_harmonised_dataset_variables_guide.xlsx -- three were wrong,
-# not just imprecise: MDCH_TEA is "Have friends round for tea or a snack once
-# a fortnight" (a social/hospitality item), NOT fresh fruit/veg -- that's
-# actually MDCH_VEG ("Eat fresh fruit and/or vegetables every day"), which had
-# been labelled just "Vegetables". MDCH_EQP is "Leisure equipment such as
-# sports equipment or a bicycle", NOT school equipment. MDCH_PLAY is "Go to a
-# playgroup at least once a week" (an early-years attendance item), NOT
-# generic indoor play. Do not revert to the old labels.
 MDCH_LABELS <- c(
   MDCH_BED  = "Bed / bedroom",
   MDCH_CEL  = "Celebrations",
@@ -100,10 +81,8 @@ if ("post" %in% names(df)) {
 }
 df[, tp        := treated * post]              # DiD term — explicit product, no formula ambiguity
 df[, YEAR_f    := factor(YEAR)]                # factor for FE / event study
-df[, GVTREGN_f := factor(GVTREGN)]            # descriptive/robustness use only; SEs
-                                               # clustered at SERNUM (household), not region --
-                                               # region-level clustering is anti-conservative
-                                               # here (see 05b_stage1_pretrend_diagnostics.R)
+# Every model below clusters at SERNUM (household), not region -- region-level
+# clustering is anti-conservative here (see 05b_stage1_pretrend_diagnostics.R).
 
 # Diagnostic: check treatment/post variation and tp coefficient name
 cat(sprintf("  treated: Scotland=%s  England=%s\n",
@@ -129,24 +108,10 @@ cat(sprintf("  Sample: %s rows, years: %s\n",
 
 # ─────────────────────────────────────────────────────────────────────────────
 # COVARIATES
-# CASE (Stewart et al. 2025) paper footnote (iii): "Controls include: a dummy
-# variable equal to one if the child resides in a household with a head aged
-# under 25 years; female head of household; ethnicity (five categories);
-# disability status of the household; lone parent; and large family, defined
-# as three or more dependent children in the household." These are the exact
-# six controls used below -- NOT income, benefit-receipt, or housing tenure,
-# which the CASE paper does not control for and which carry a mediator/bad-
-# control risk here (income and, pre-Nov-2022, benefit-receipt respond
-# mechanically to SCP eligibility/receipt itself).
-#
-# Same six variables already used in 02_summary_stats.R's "cf. CASE Table 2"
-# background-characteristics table, so the balance table and this regression
-# are now built on a consistent operationalisation of Stewart's controls.
-#
-# IMPORTANT: these must be added to `df` BEFORE the df_mdch/df_mdch_flag
-# subsamples are sliced off below -- data.table subsets are snapshots, not
-# live views, so columns added to `df` afterward would silently not appear
-# in df_mdch/df_mdch_flag (this broke the first run: "not in the data set").
+# CASE's six controls (Stewart et al. 2025, footnote iii): young head (<25),
+# female head, ethnicity, disability, lone parent, large family (3+ kids).
+# No income/benefits/housing -- those respond to SCP itself, so they're bad
+# controls here. Same six vars as the balance table in 02_summary_stats.R.
 # ─────────────────────────────────────────────────────────────────────────────
 df[, young_head          := as.numeric(AGEHDBAND == 1)]   # head aged 16-24
 df[, female_head         := as.numeric(SEXHD == 2)]
@@ -158,11 +123,6 @@ df[, ETH_f               := factor(ifelse(ETH == 99, NA, ETH))]  # 99 = not decl
 # ── Subsamples (created after tp AND the covariates above are added to df) ───
 df_mdch      <- df[mdch_observed == 1]      # MDCH module observed
 df_mdch_flag <- df[!is.na(MDCH)]           # official DWP flag, 2017-2024
-# Food insecurity is a separate USDA-derived module (WhoFood questions) with
-# its own availability window/non-response pattern -- deliberately NOT
-# restricted to df_mdch's "MDCH module observed" criterion, which describes
-# completion of the (unrelated) deprivation-item battery. Own subsample,
-# same pattern as df_mdch_flag above.
 df_food      <- df[!is.na(food_insecure)]  # food security module observed
 
 cat(sprintf("  MDCH items subsample:     %s rows\n", format(nrow(df_mdch),      big.mark=",")))
@@ -174,18 +134,8 @@ CASE_COVS <- c("young_head", "female_head", "ETH_f",
                "disabled_household", "lone_parent", "large_family")
 
 # Extended spec: CASE controls + child's own AGE. NOT part of the replication
-# claim -- reported as a separate robustness variant (Stage 1b'). Age is
-# plausibly pre-determined w.r.t. treatment (not caused by receiving SCP) and
-# substantively relevant here because several MDCH items (school equipment,
-# indoor/outdoor play, holidays) are age-differentiated in what they capture.
+# claim -- reported as a separate robustness variant (Stage 1b').
 CASE_COVS_EXT <- c(CASE_COVS, "AGE")
-
-# Retained for reference only -- NOT part of the CASE replication spec above.
-# Income/benefits are mediator/bad-control risks; none of these match
-# Stewart's actual published controls.
-DEMO_COVS    <- c("AGE", "SEX", "ADULTH", "NUMBKIDS")
-INCOME_COVS  <- c("S_OE_BHC", "BENBU_UC_OR_EQUIV", "BENBU_CTC", "BENBU_IS", "BENBU_DLA")
-HOUSING_COVS <- c("TENHBAI")
 
 # All OLS covariates (used in the headline covariate-adjusted spec)
 OLS_COVS <- CASE_COVS
@@ -204,9 +154,32 @@ make_did_fml <- function(outcome, covs = NULL) {
   as.formula(paste(base, "| YEAR_f"))
 }
 
+# Helper to build CSV
+print_did_result <- function(name, model) {
+  cf <- coef(model); sv <- fixest::se(model); pv <- fixest::pvalue(model)
+  if (!DID_TERM %in% names(cf)) {
+    cat(sprintf("  %-40s  [%s dropped]\n", name, DID_TERM))
+    return(invisible(NULL))
+  }
+  sig <- ifelse(pv[DID_TERM] < .01, "***", ifelse(pv[DID_TERM] < .05, "**",
+               ifelse(pv[DID_TERM] < .1, "*", "")))
+  cat(sprintf("  %-40s  coef=%6.4f  SE=%6.4f  %s\n", name, cf[DID_TERM], sv[DID_TERM], sig))
+}
+print_did_results <- function(models) for (nm in names(models)) print_did_result(nm, models[[nm]])
+
+did_result_row <- function(name, model) {
+  cf <- coef(model); sv <- fixest::se(model); pv <- fixest::pvalue(model); ci <- confint(model)
+  if (!DID_TERM %in% names(cf)) return(NULL)
+  data.frame(outcome = name, coef = cf[DID_TERM], se = sv[DID_TERM], pval = pv[DID_TERM],
+             ci_lo = ci[DID_TERM, 1], ci_hi = ci[DID_TERM, 2], n_obs = nobs(model), r2 = r2(model, "r2"))
+}
+write_did_csv <- function(models, path) {
+  csv <- bind_rows(lapply(names(models), function(nm) did_result_row(nm, models[[nm]])))
+  write.csv(csv, path, row.names = FALSE)
+}
+
 # ─────────────────────────────────────────────────────────────────────────────
 # STAGE 1A: SIMPLE 2×2 DiD (no covariates, no FE beyond treated + post)
-# Establishes the raw treatment effect before any adjustment
 # ─────────────────────────────────────────────────────────────────────────────
 cat("\n── Stage 1a: Simple 2×2 DiD ────────────────────────────────────────────\n")
 
@@ -214,12 +187,6 @@ simple_outcomes <- list(
   "Any deprivation (mdch_any)"    = list(data = df_mdch,      y = "mdch_any"),
   "Severe deprivation"            = list(data = df_mdch,      y = "mdch_severe"),
   "Official MDCH flag"            = list(data = df_mdch_flag, y = "MDCH"),
-  # Baseline-only, for comparability with Stewart et al. (CASE, 2025), who
-  # include food insecurity alongside material deprivation in their headline
-  # table. NOT carried into Stage 2+ (item-level/DML decomposition): food
-  # insecurity is not one of the ten MDCH items, so it has no place in an
-  # item-level breakdown of material deprivation specifically -- see
-  # Methodology 4.x for the explicit scope note.
   "Food insecurity"               = list(data = df_food,      y = "food_insecure")
 )
 
@@ -253,25 +220,10 @@ etable(simple_models,
 
 # Print to console
 cat("\nSimple DiD estimates:\n")
-for (nm in names(simple_models)) {
-  cf  <- coef(simple_models[[nm]])
-  sv  <- fixest::se(simple_models[[nm]])
-  pv  <- fixest::pvalue(simple_models[[nm]])
-  if (!DID_TERM %in% names(cf)) { cat(sprintf("  %-40s  [%s dropped]\n", nm, DID_TERM)); next }
-  sig <- ifelse(pv[DID_TERM] < .01, "***", ifelse(pv[DID_TERM] < .05, "**",
-               ifelse(pv[DID_TERM] < .1, "*", "")))
-  cat(sprintf("  %-40s  coef=%6.4f  SE=%6.4f  %s\n", nm, cf[DID_TERM], sv[DID_TERM], sig))
-}
+print_did_results(simple_models)
 
 # CSV companion to table_simple_did.tex (same numbers, easier to scan/reuse)
-simple_did_csv <- bind_rows(lapply(names(simple_models), function(nm) {
-  m <- simple_models[[nm]]
-  cf <- coef(m); sv <- fixest::se(m); pv <- fixest::pvalue(m); ci <- confint(m)
-  if (!DID_TERM %in% names(cf)) return(NULL)
-  data.frame(outcome = nm, coef = cf[DID_TERM], se = sv[DID_TERM], pval = pv[DID_TERM],
-             ci_lo = ci[DID_TERM, 1], ci_hi = ci[DID_TERM, 2], n_obs = nobs(m), r2 = r2(m, "r2"))
-}))
-write.csv(simple_did_csv, file.path(TABLES_DIR, "table_simple_did.csv"), row.names = FALSE)
+write_did_csv(simple_models, file.path(TABLES_DIR, "table_simple_did.csv"))
 cat("  ✓ Simple DiD table saved (CSV)\n")
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -282,7 +234,6 @@ cat("\n── Stage 1b: Covariate-adjusted DiD (Stewart replication) ───�
 
 # Available covariates (drop any not in dataset)
 avail_covs <- OLS_COVS[OLS_COVS %in% names(df)]
-cov_str    <- paste(avail_covs, collapse = " + ")
 
 adj_models <- lapply(simple_outcomes, function(spec) {
   feols(
@@ -293,18 +244,6 @@ adj_models <- lapply(simple_outcomes, function(spec) {
     notes   = FALSE
   )
 })
-
-# Diagnostic: show which models have tp and which dropped it
-cat("  Coefficient check for adj_models:\n")
-for (nm in names(adj_models)) {
-  cf_names <- names(coef(adj_models[[nm]]))
-  if ("tp" %in% cf_names) {
-    cat(sprintf("    %-42s  ✓ tp found\n", nm))
-  } else {
-    cat(sprintf("    %-42s  ✗ tp DROPPED — coefs: %s\n", nm,
-                paste(cf_names, collapse = ", ")))
-  }
-}
 
 adj_models_ok <- Filter(function(m) "tp" %in% names(coef(m)), adj_models)
 if (length(adj_models_ok) > 0) {
@@ -328,25 +267,10 @@ if (length(adj_models_ok) > 0) {
 }
 
 cat("\nAdjusted DiD estimates:\n")
-for (nm in names(adj_models)) {
-  cf  <- coef(adj_models[[nm]])
-  sv  <- fixest::se(adj_models[[nm]])
-  pv  <- fixest::pvalue(adj_models[[nm]])
-  if (!DID_TERM %in% names(cf)) { cat(sprintf("  %-40s  [%s dropped]\n", nm, DID_TERM)); next }
-  sig <- ifelse(pv[DID_TERM] < .01, "***", ifelse(pv[DID_TERM] < .05, "**",
-               ifelse(pv[DID_TERM] < .1, "*", "")))
-  cat(sprintf("  %-40s  coef=%6.4f  SE=%6.4f  %s\n", nm, cf[DID_TERM], sv[DID_TERM], sig))
-}
+print_did_results(adj_models)
 
-# CSV companion to table_adj_did.tex (same numbers, easier to scan/reuse)
-adj_did_csv <- bind_rows(lapply(names(adj_models), function(nm) {
-  m <- adj_models[[nm]]
-  cf <- coef(m); sv <- fixest::se(m); pv <- fixest::pvalue(m); ci <- confint(m)
-  if (!DID_TERM %in% names(cf)) return(NULL)
-  data.frame(outcome = nm, coef = cf[DID_TERM], se = sv[DID_TERM], pval = pv[DID_TERM],
-             ci_lo = ci[DID_TERM, 1], ci_hi = ci[DID_TERM, 2], n_obs = nobs(m), r2 = r2(m, "r2"))
-}))
-write.csv(adj_did_csv, file.path(TABLES_DIR, "table_adj_did.csv"), row.names = FALSE)
+# CSV companion to table_adj_did.tex
+write_did_csv(adj_models, file.path(TABLES_DIR, "table_adj_did.csv"))
 cat("  ✓ Adjusted DiD table saved (CSV)\n")
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -390,46 +314,19 @@ if (length(ext_models_ok) > 0) {
 }
 
 cat("\nExtended (CASE + age) DiD estimates:\n")
-for (nm in names(ext_models)) {
-  cf  <- coef(ext_models[[nm]])
-  sv  <- fixest::se(ext_models[[nm]])
-  pv  <- fixest::pvalue(ext_models[[nm]])
-  if (!DID_TERM %in% names(cf)) { cat(sprintf("  %-40s  [%s dropped]\n", nm, DID_TERM)); next }
-  sig <- ifelse(pv[DID_TERM] < .01, "***", ifelse(pv[DID_TERM] < .05, "**",
-               ifelse(pv[DID_TERM] < .1, "*", "")))
-  cat(sprintf("  %-40s  coef=%6.4f  SE=%6.4f  %s\n", nm, cf[DID_TERM], sv[DID_TERM], sig))
-}
+print_did_results(ext_models)
 
-ext_did_csv <- bind_rows(lapply(names(ext_models), function(nm) {
-  m <- ext_models[[nm]]
-  cf <- coef(m); sv <- fixest::se(m); pv <- fixest::pvalue(m); ci <- confint(m)
-  if (!DID_TERM %in% names(cf)) return(NULL)
-  data.frame(outcome = nm, coef = cf[DID_TERM], se = sv[DID_TERM], pval = pv[DID_TERM],
-             ci_lo = ci[DID_TERM, 1], ci_hi = ci[DID_TERM, 2], n_obs = nobs(m), r2 = r2(m, "r2"))
-}))
-write.csv(ext_did_csv, file.path(TABLES_DIR, "table_adj_ext_did.csv"), row.names = FALSE)
+write_did_csv(ext_models, file.path(TABLES_DIR, "table_adj_ext_did.csv"))
 cat("  ✓ Extended (CASE + age) DiD table saved (CSV)\n")
 
 # ─────────────────────────────────────────────────────────────────────────────
-# STAGE 1B'': CASE EXACT-REPLICATION SPEC (diagnostic add-on, NOT a replacement
-# for Simple/Adjusted/Extended above)
+# STAGE 1B'': CASE EXACT-REPLICATION SPEC (diagnostic, not a replacement for
+# Simple/Adjusted/Extended above)
 #
-# Stewart et al. (2025) equation (1): Y = a + l1*Scot + l2*Post + d*(Scot*Post)
-# + b*X + e, with year FE added in their "controls" column. Our Adjusted spec
-# above matches their controls+year-FE column on N, controls, and treatment
-# timing exactly, but omits a standalone `post` regressor -- we only ever
-# enter it via `tp` (treated*post), relying on YEAR_f to soak up everything
-# else. That's not fully redundant: YEAR_f is constant across an entire survey
-# year, but `post` has real sub-year variation within FYE2023 (the exact
-# 14-Nov-2022 cutoff), so CASE's model can separately estimate a common
-# (non-Scotland-specific) within-FYE2023 shift that ours currently cannot.
-#
-# This spec adds `post` explicitly -- y ~ treated + post + tp + X | YEAR_f --
-# nesting CASE's equation while keeping our extra year-FE flexibility, as a
-# check on how much of the CASE magnitude gap (-0.076 vs -0.085 on the MDCH
-# flag; -0.066 vs -0.088 on food insecurity, per their Table 3) that one
-# omission explains. Kept as a separate diagnostic table for now; fold into
-# (or swap for) the main Adjusted/Extended spec later once reviewed.
+# CASE's equation (1) includes a standalone `post` term; our Adjusted spec
+# above doesn't -- we only enter it via `tp` (treated*post), relying on
+# YEAR_f for everything else. Adds `post` explicitly here as a check on how
+# much that omission matters against CASE's own Table 3 magnitudes.
 # ─────────────────────────────────────────────────────────────────────────────
 cat("\n── Stage 1b'': CASE exact-replication spec (explicit Post term) ───────\n")
 
@@ -473,19 +370,9 @@ if (length(case_models_ok) > 0) {
 }
 
 cat("\nCASE exact-replication DiD estimates (tp only, for quick comparison):\n")
-for (nm in names(case_models)) {
-  cf  <- coef(case_models[[nm]])
-  sv  <- fixest::se(case_models[[nm]])
-  pv  <- fixest::pvalue(case_models[[nm]])
-  if (!DID_TERM %in% names(cf)) { cat(sprintf("  %-40s  [%s dropped]\n", nm, DID_TERM)); next }
-  sig <- ifelse(pv[DID_TERM] < .01, "***", ifelse(pv[DID_TERM] < .05, "**",
-               ifelse(pv[DID_TERM] < .1, "*", "")))
-  cat(sprintf("  %-40s  coef=%6.4f  SE=%6.4f  %s\n", nm, cf[DID_TERM], sv[DID_TERM], sig))
-}
+print_did_results(case_models)
 
-# Full-coefficient CSV (every term, not just tp) -- this is what the LaTeX
-# table-generation script (11_make_latex_tables.R) will read to reproduce a
-# CASE-Table-3-style layout with all covariates shown.
+# Full-coefficient CSV
 case_exact_csv <- bind_rows(lapply(names(case_models_ok), function(nm) {
   m  <- case_models_ok[[nm]]
   cf <- coef(m); sv <- fixest::se(m); pv <- fixest::pvalue(m); ci <- confint(m)
@@ -499,7 +386,6 @@ cat("  ✓ CASE exact-replication table saved (CSV, full coefficients)\n")
 
 # ─────────────────────────────────────────────────────────────────────────────
 # STAGE 1C: ITEM-LEVEL OLS DiD (one regression per MDCH item)
-# Supervisor note: "looking at each outcome individually gives more information"
 # ─────────────────────────────────────────────────────────────────────────────
 cat("\n── Stage 1c: Item-level OLS DiD ────────────────────────────────────────\n")
 
@@ -591,8 +477,6 @@ cat("  ✓ Item-level FYE2024-sensitivity comparison saved\n")
 
 # ─────────────────────────────────────────────────────────────────────────────
 # STAGE 1D: EVENT STUDY
-# Year-specific treatment effects relative to FYE 2022 (last pre-period year)
-# Tests parallel pre-trends assumption visually and via Wald test
 # ─────────────────────────────────────────────────────────────────────────────
 cat("\n── Stage 1d: Event study ───────────────────────────────────────────────\n")
 
@@ -736,10 +620,7 @@ if (nrow(item_es) > 0) {
 cat("\n── Robustness: excluding FYE 2022 from pre-period ──────────────────────\n")
 
 # All four headline outcomes, on the same Adjusted (CASE-controls) spec used
-# throughout Stage 1b -- previously this block only covered mdch_any and
-# mdch_severe, so the "leaves the headline result unchanged" claim in the
-# write-up wasn't actually tested for the official MDCH flag itself. Extended
-# 2026-08-14 to match the age-restricted robustness table's outcome coverage.
+# throughout Stage 1b
 rob_outcomes <- list(
   "Official MDCH flag"         = list(data = df_mdch_flag[YEAR != 2022], y = "MDCH"),
   "Any deprivation (mdch_any)" = list(data = df_mdch[YEAR != 2022],      y = "mdch_any"),
@@ -753,41 +634,21 @@ rob_models <- lapply(rob_outcomes, function(spec) {
 })
 
 cat("Robustness estimates (FYE 2022 excluded from pre-period):\n")
-for (nm in names(rob_models)) {
-  cf <- coef(rob_models[[nm]]); sv <- fixest::se(rob_models[[nm]]); pv <- fixest::pvalue(rob_models[[nm]])
-  sig <- ifelse(pv[DID_TERM] < .01, "***", ifelse(pv[DID_TERM] < .05, "**",
-                ifelse(pv[DID_TERM] < .1, "*", "")))
-  cat(sprintf("  %-30s  coef=%6.4f  SE=%6.4f  %s\n", nm, cf[DID_TERM], sv[DID_TERM], sig))
-}
+print_did_results(rob_models)
 
 # CSV companion, same format as table_age_restricted_did.csv, for the
 # write-up's robustness-checks table.
-rob_did_csv <- bind_rows(lapply(names(rob_models), function(nm) {
-  m <- rob_models[[nm]]
-  cf <- coef(m); sv <- fixest::se(m); pv <- fixest::pvalue(m); ci <- confint(m)
-  if (!DID_TERM %in% names(cf)) return(NULL)
-  data.frame(outcome = nm, coef = cf[DID_TERM], se = sv[DID_TERM], pval = pv[DID_TERM],
-             ci_lo = ci[DID_TERM, 1], ci_hi = ci[DID_TERM, 2], n_obs = nobs(m), r2 = r2(m, "r2"))
-}))
-write.csv(rob_did_csv, file.path(TABLES_DIR, "table_fye2022_excl_did.csv"), row.names = FALSE)
+write_did_csv(rob_models, file.path(TABLES_DIR, "table_fye2022_excl_did.csv"))
 cat("  ✓ FYE2022-exclusion robustness table saved (CSV)\n")
 
 # ─────────────────────────────────────────────────────────────────────────────
 # ROBUSTNESS: restrict sample to ages 6-15 (excludes Best Start overlap)
 #
-# Scotland also runs other child-targeted, Scotland-only transfers alongside
-# SCP -- most notably the Best Start Grant (pregnancy, age 2-3.5, age 4-5
-# instalments) and Best Start Foods (pregnancy to age 3, extended for
-# school-age children on free school meals) -- both age-gated to roughly
-# pregnancy through age 5-6 and both pre-dating SCP. The under-6 age band is
-# therefore where SCP's estimated effect is most likely entangled with these
-# other schemes, since a young child's household could be newly affected by
-# either. Children aged 6-15 were never Best-Start-eligible at any point in
-# the sample window and only became SCP-eligible at the November 2022
-# all-under-16 expansion, so restricting to this age band isolates SCP's own
-# contribution for the part of the sample where the two kinds of scheme
-# cannot overlap. Compare against the headline Adjusted-spec estimates above
-# (Stage 1b, `table_adj_did.csv`) on the same six CASE covariates.
+# Scotland also runs other child-targeted transfers pre-dating SCP (Best
+# Start Grant/Foods), age-gated to roughly pregnancy through age 5-6. Under-6s
+# are where SCP's effect could be entangled with those. Ages 6-15 were never
+# Best-Start-eligible and only became SCP-eligible at the Nov 2022 expansion,
+# so this isolates SCP's own effect. Compare against Stage 1b's Adjusted spec.
 # ─────────────────────────────────────────────────────────────────────────────
 cat("\n── Robustness: age-restricted sample (6-15, excludes Best Start overlap) ──\n")
 
@@ -839,36 +700,13 @@ if (length(age_models_ok) > 0) {
 }
 
 cat("\nAge-restricted (6-15) DiD estimates, Adjusted spec:\n")
-for (nm in names(age_models)) {
-  cf  <- coef(age_models[[nm]])
-  sv  <- fixest::se(age_models[[nm]])
-  pv  <- fixest::pvalue(age_models[[nm]])
-  if (!DID_TERM %in% names(cf)) { cat(sprintf("  %-40s  [%s dropped]\n", nm, DID_TERM)); next }
-  sig <- ifelse(pv[DID_TERM] < .01, "***", ifelse(pv[DID_TERM] < .05, "**",
-               ifelse(pv[DID_TERM] < .1, "*", "")))
-  cat(sprintf("  %-40s  coef=%6.4f  SE=%6.4f  %s\n", nm, cf[DID_TERM], sv[DID_TERM], sig))
-}
+print_did_results(age_models)
 
 # CSV companion, same format as table_adj_did.csv, for easy side-by-side
 # comparison against the full-sample Adjusted-spec estimates.
-age_did_csv <- bind_rows(lapply(names(age_models), function(nm) {
-  m <- age_models[[nm]]
-  cf <- coef(m); sv <- fixest::se(m); pv <- fixest::pvalue(m); ci <- confint(m)
-  if (!DID_TERM %in% names(cf)) return(NULL)
-  data.frame(outcome = nm, coef = cf[DID_TERM], se = sv[DID_TERM], pval = pv[DID_TERM],
-             ci_lo = ci[DID_TERM, 1], ci_hi = ci[DID_TERM, 2], n_obs = nobs(m), r2 = r2(m, "r2"))
-}))
-write.csv(age_did_csv, file.path(TABLES_DIR, "table_age_restricted_did.csv"), row.names = FALSE)
+write_did_csv(age_models, file.path(TABLES_DIR, "table_age_restricted_did.csv"))
 cat("  ✓ Age-restricted DiD table saved (CSV)\n")
 
-# ─────────────────────────────────────────────────────────────────────────────
-# ROBUSTNESS: income/benefit covariates -- NOTE
-# The CASE (2025) replication spec (Stage 1b, above) never included income or
-# benefit-receipt covariates in the first place (see the COVARIATES section
-# header for the mediator/bad-control rationale), so there's no "drop income"
-# check left to run here. The sensitivity check that matters now is CASE
-# controls vs. CASE + child age -- see Stage 1b' above.
-# ─────────────────────────────────────────────────────────────────────────────
 
 # ─────────────────────────────────────────────────────────────────────────────
 # SAVE FULL RESULTS SUMMARY
@@ -902,4 +740,4 @@ etable(
 cat("\n✓ All outputs saved to:\n")
 cat(sprintf("  Tables:  %s\n", TABLES_DIR))
 cat(sprintf("  Figures: %s\n", FIGURES_DIR))
-cat("\nNext: run 04_dml_did.R for Double ML estimates\n")
+cat("\nNext: run 04_stage2_item_did.R for the item-stacked DiD\n")
