@@ -5,9 +5,9 @@
 # Builds BOTH extracts the rest of the pipeline needs, from one shared load
 # of the raw HBAI files:
 #   - hbai_clean.csv          England vs Scotland only. Everything downstream
-#                             (03, 04, 05, 05b, 05c, 06, 06b, 07, 08, 09, 12,
-#                             13) reads this one.
-#   - hbai_clean_placebo.csv  all four UK nations. Only 10_placebo_wales_ni.R
+#                             (03, 04, 05, 05b, 05c, 06, 06b, 07, 08, 11,
+#                             12) reads this one.
+#   - hbai_clean_placebo.csv  all four UK nations. Only 09_placebo_wales_ni.R
 #                             reads this
 #
 # Key choices:
@@ -407,8 +407,8 @@ cat(sprintf("\nSaved to %s\n  Shape: %d rows x %d cols\n", OUT_MAIN, nrow(df_mai
 
 # =============================================================================
 # EXTRACT 2: ALL FOUR NATIONS -> hbai_clean_placebo.csv
-# Only 10_placebo_wales_ni.R reads this. treated/post/did below are Scotland-
-# specific -- they don't drive the actual Wales/NI checks. Script 10 builds
+# Only 09_placebo_wales_ni.R reads this. treated/post/did below are Scotland-
+# specific -- they don't drive the actual Wales/NI checks. That script builds
 # its own treated/tp for each comparison (Wales vs England, NI vs England),
 # since Wales and NI never got SCP and need their own placebo logic.
 # =============================================================================

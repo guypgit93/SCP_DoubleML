@@ -1,5 +1,5 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# 10_placebo_wales_ni.R
+# 09_placebo_wales_ni.R
 # FALSIFICATION/PLACEBO CHECK (feedback point 2): Wales and NI never received
 # SCP -- so if we run the SAME DiD spec Stage 1 uses for Scotland-vs-England,
 # but with Wales (or NI) standing in as the "treated" nation against England,

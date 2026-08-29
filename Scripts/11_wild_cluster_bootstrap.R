@@ -1,5 +1,5 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# 12_wild_cluster_bootstrap.R
+# 11_wild_cluster_bootstrap.R
 # ROBUSTNESS: wild-cluster bootstrap inference on the headline Adjusted
 # Scotland x Post coefficient (official MDCH flag), as a modern-best-practice
 # confirmatory check on the household-clustered SEs reported in Stage 1.
@@ -22,7 +22,7 @@
 # This does NOT test whether Scotland being the only treated NATION could
 # itself be an idiosyncratic-shock confound (that's a different, harder
 # question, partially addressed already by the Wales/NI falsification checks
-# in 10_placebo_wales_ni.R). Don't conflate the two in the write-up.
+# in 09_placebo_wales_ni.R). Don't conflate the two in the write-up.
 #
 # IMPLEMENTATION NOTE: this is a hand-rolled WCR (wild cluster restricted)
 # bootstrap using only feols()/coef()/predict() -- NOT fwildclusterboot's

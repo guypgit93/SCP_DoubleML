@@ -1,5 +1,5 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# 11_make_latex_tables.R
+# 10_make_latex_tables.R
 # Generates publication-ready LaTeX tables (booktabs style) for Stages 1-5 of
 # the results pipeline, for direct \input{} into the Overleaf write-up.
 #
@@ -15,7 +15,7 @@
 #               06b_stage3_dml_wide.R     -> dml_did_causalweight_comparison_MDCH.csv,
 #                                             dml_did_wide_covariates_MDCH.csv
 #   Stage 4  <- 07_stage4_dml_item.R      -> dml_did_item_level_wide.csv
-#   Stage 5  <- 09_stage5_stacked_ml_did.R -> stage5_stacked_item_did.csv
+#   Stage 5  <- 08_stage5_stacked_ml_did.R -> stage5_stacked_item_did.csv
 #
 # Deliberately does NOT read: summary_all_stages_comparison.csv or
 # dml_vs_ols_composite.csv (both reference the pre-restructure att_gt/
@@ -601,7 +601,7 @@ stage1_case_exact <- function() {
 
 # ── Falsification check: Wales / Northern Ireland as pseudo-treated ────────
 #
-# Source: 10_placebo_wales_ni.R -> placebo_wales_ni.csv. Wales and Northern
+# Source: 09_placebo_wales_ni.R -> placebo_wales_ni.csv. Wales and Northern
 # Ireland substituted in turn for Scotland as the "treated" unit against
 # England as control, using SCP's actual rollout date as the pseudo-treatment
 # date; neither nation received SCP, so a null coefficient is the expected,

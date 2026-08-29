@@ -1,5 +1,5 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# 13_dml_stability_check.R
+# 12_dml_stability_check.R
 # ROBUSTNESS: finite-sample stability of the headline doubly robust DML
 # estimate (wide covariates, random forest nuisance models -- the -0.045
 # figure quoted as the preferred estimate in Discussion Section 6.1's
@@ -59,7 +59,7 @@
 #     NOT valid data and should not be used for the write-up.
 #
 # TO RUN (recommended, from Terminal, so it survives you closing RStudio):
-#   nohup caffeinate -i Rscript "Scripts/13_dml_stability_check.R" > dml_stability_log.txt 2>&1 &
+#   nohup caffeinate -i Rscript "Scripts/12_dml_stability_check.R" > dml_stability_log.txt 2>&1 &
 # `caffeinate -i` stops macOS sleeping while it runs (note: this does NOT
 # prevent lid-close sleep -- leave the lid open and the machine plugged in).
 # `nohup` keeps it alive even if the terminal window/tab closes. The trailing
