@@ -1,62 +1,17 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # 06b_stage3_dml_wide.R
-# Stage 3 (Guy's 2026-07-17 narrative: "is this sensitive to covariate
-# adjustment/functional form"). Same causalweight::didDML() setup as
-# 06_stage3_dml_lean.R, but with a much richer covariate set instead of
-# the 7-variable lean set -- deliberately the setting where DML's tolerance
-# for high-dimensional X should show up, unlike att_gt() (04_dml_did.R),
-# which needed the lean set because a rich one-hot covariate set made its
-# per-(g,t)-cell models singular/rank-deficient. NOTE: att_gt()/DR-DiD (04)
-# is NOT part of the final write-up per Guy's decision -- this comment stays
-# only as the technical reason DML tolerates a wide X where att_gt() didn't.
+# Stage 3, WIDE covariate arm: same causalweight::didDML() setup as
+# 06_stage3_dml_lean.R (identical estimator, outcome, ML methods), but a much
+# richer ~40-variable covariate set instead of the lean six CASE controls --
+# the setting where DML's high-dimensional tolerance should show up (unlike
+# the archived att_gt() approach, archive/04_dml_did.R, whose per-cell models
+# went singular/rank-deficient on a rich covariate set).
 #
-# PRIMARY OUTCOME = official DWP MDCH flag ("MDCH"), matching Stage 2's
-# baseline (CASE/Andersen et al. replication). mdch_any results already
-# obtained (lasso -0.0955***, randomforest -0.0626 n.s.) stay valid as a
-# secondary/robustness outcome, just not primary going forward. See
-# 06_stage3_dml_lean.R's header for the interesting lasso-vs-RF reversal
-# under mdch_any (RF beat lasso on the lean set, lost to it on the wide set --
-# likely default `mtry` diluting across many sparse one-hot dummy covariates,
-# something lasso's regularization handles more gracefully).
+# Covariate set curated from 01_hbai_prep.R's ~65-variable DML block, typed
+# against the HBAI variable guide (determines z-scoring/0-1/one-hot below):
 #
-# Covariate set built from 01_hbai_prep.R's KEEP_VARS "DML covariates" block
-# (~65 raw variables originally kept for this purpose but never used, since
-# 04_dml_did.R had to fall back to the lean set). Types confirmed against
-# the HBAI variable guide (5828_hbai_2425_harmonised_dataset_variables_guide.xlsx)
-# rather than guessed from variable names -- every variable there is typed
-# "Category" / "£ Amount" / "Years old" / "Value", which determines whether
-# it's z-scored, kept as 0/1, or one-hot encoded below.
-#
-# Curation applied (not a raw dump of all 65 variables):
-#   - Dropped *BAND variants (AGEBAND_CH, AGEHDBAND, AGESPBAND, ADULTHBAND,
-#     AGEHDBAND_KID) -- strictly coarser re-encodings of continuous variables
-#     already included (AGE, AGEHD, AGESP, ADULTH); no new information, just
-#     redundant dummy columns.
-#   - Dropped ETH / ETHGRPHH in favour of ETHGRPHHPUB, and PTENTYP2 in favour
-#     of TENHBAI -- the variable guide itself recommends these over the
-#     alternatives.
-#   - Kept one representative each of family-type (NEWFAMBU_KID) and marital
-#     status (MARITAL_KID) rather than all ~8 overlapping family-composition
-#     variables (COUPLE_KID, NEWFAMBU_SINGLE/WITH/WITH_WA/WITH_PN/WITH_PN_TOT,
-#     MARITAL_WITHKID) and the age-specific KID0_1..KID16PLUS counts, which
-#     mostly reduce to combinations of NUMBKIDS + AGE already in the model.
-#   - Kept DIS (existing) + DIS_TYPE + DSCORFAM + BENBU_DISBEN as the
-#     disability set, skipping the remaining near-duplicate disability flags
-#     (DISCORKID, DISCORABFLG, DSCORFAM_WORK, DSCORANDBEN, BENBU_DLA,
-#     BENBU_PIP -- these overlap heavily with BENBU_DISBEN's definition).
-#   - Kept all benefit-receipt flags (UC, FSM, IS, JSA, ESA, HB, CTC, WTC, PC)
-#     as-is -- these are genuinely distinct programmes, not near-duplicates.
-#
-# Binary vs multi-level categoricals are detected automatically at runtime
-# (by unique-value count) rather than hardcoded, since exact coding isn't
-# knowable without the live data. Binary ones are used as 0/1 directly;
-# multi-level ones are one-hot encoded via model.matrix() with one reference
-# level dropped.
-#
-# MLmethod restricted to lasso + randomforest (no ensemble -- see
-# 06_stage3_dml_lean.R's header for why: 75min/outcome, not viable).
-#
-# Requires: same packages as 06_stage3_dml_lean.R.
+# MLmethod restricted to lasso + randomforest -- no ensemble (too slow even
+# on the lean set; see 06's header).
 # ─────────────────────────────────────────────────────────────────────────────
 
 library(causalweight)
@@ -90,7 +45,7 @@ df[, treated := as.numeric(scotland)]
 df[, post    := as.numeric(post)]
 
 df$MDCH <- suppressWarnings(as.numeric(df$MDCH))
-df$MDCH <- ifelse(df$MDCH < 0, NA_real_, df$MDCH)
+df$MDCH <- ifelse(df$MDCH < 0, NA_real_, df$MDCH)   # negative codes are DWP "missing" sentinels
 df_mdch <- df[mdch_observed == 1]
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -98,19 +53,9 @@ df_mdch <- df[mdch_observed == 1]
 # ─────────────────────────────────────────────────────────────────────────────
 CONTINUOUS_VARS <- c(
   "AGE", "AGEHD",                                              # Years old
-  # AGESP (age of spouse) deliberately excluded -- structurally NA for
-  # single-parent/single-person families (no spouse to have an age), not
-  # randomly missing. Combined with ~40 other variables in one na.omit(),
-  # this alone was enough to collapse the complete-case sample to 0 rows.
-  # Family/partnership structure is already captured via MARITAL_KID /
-  # NEWFAMBU_KID below without needing spouse-specific age.
   "S_OE_BHC", "S_OE_AHC", "S_OE_GRO",                          # £ equivalised income
   "S_OE_GRO_PROP_EARN", "S_OE_GRO_PROP_BEN", "S_OE_GRO_PROP_INV", # Value (income shares)
   "EHCOST", "ES_HCOST",                                        # £ housing costs
-  # ERENTBU dropped (2026-07-17 run: 28.3% NA) -- structurally NA for
-  # owner-occupiers (no rent component), same pattern as AGESP. TENHBAI
-  # (tenure type, below) already captures renter-vs-owner, so this was
-  # redundant on top of being a missingness risk.
   "CHBENBU", "ESBENIBU", "INCHILBU", "EGRINCBU", "WINPAYBU"
   # WFTCBU dropped (2026-07-17 run: 100% NA) -- Working Families' Tax Credit
   # was abolished in 2003; this dataset covers 2017-2024, so the column is
@@ -122,17 +67,6 @@ CONTINUOUS_VARS <- c(
 # set (06_stage3_dml_lean.R).
 COUNT_VARS <- c("NUMBKIDS", "ADULTH")
 
-# Everything else from the KEEP_VARS DML block that survived curation --
-# auto-detected below as binary (kept 0/1) vs multi-level (one-hot encoded).
-# EMPSTATI dropped (2026-07-17 run: 100% NA despite being a valid column --
-# likely a harmonisation gap across the 3 stacked HBAI vintage files in
-# 01_hbai_prep.R; worth investigating separately, not blocking on it here).
-# BENBU_UC dropped (2026-07-17 run: 30.7% NA) -- likely reflects UC's
-# gradual rollout/legacy-benefit migration overlapping this sample period;
-# genuinely informative, not just noise, but too much missingness to include
-# safely alongside ~35 other variables in one na.omit(). Worth reintroducing
-# later as a 3-level factor (received / not received / not-yet-eligible-era)
-# rather than dropping permanently.
 CATEGORICAL_VARS <- c(
   "DIS", "DIS_TYPE", "DSCORFAM", "BENBU_DISBEN",
   "TENHBAI", "ETHGRPHHPUB",
@@ -158,8 +92,8 @@ for (v in c(CONTINUOUS_VARS, COUNT_VARS, CATEGORICAL_VARS)) {
   raw_sub[[v]] <- ifelse(raw_sub[[v]] < 0, NA_real_, raw_sub[[v]])  # HBAI sentinel negatives -> NA
 }
 
-# ── Per-variable missingness diagnostic -- run BEFORE na.omit() so a single
-# structurally-conditional variable (like AGESP was) is visible immediately
+# ── Per-variable missingness diagnostic, run BEFORE na.omit() so a single
+# structurally-conditional variable is visible immediately
 # instead of silently collapsing the joint complete-case sample to 0 rows. ──
 na_report <- sapply(c(CONTINUOUS_VARS, COUNT_VARS, CATEGORICAL_VARS),
                      function(v) round(100 * mean(is.na(raw_sub[[v]])), 1))
@@ -220,7 +154,7 @@ results <- list()
 for (ml in ML_METHODS) {
   cat(sprintf("\n== didDML (WIDE covariates): MLmethod='%s' (est='dr', k=%d folds) ====\n",
               ml, K_FOLDS))
-  cat(sprintf("  NOTE: %d covariate columns vs 7 in the lean set -- expect meaningfully\n", ncol(x_mat)))
+  cat(sprintf("  NOTE: %d covariate columns vs 10 in the lean set -- expect meaningfully\n", ncol(x_mat)))
   cat("  longer runtime than 06_stage3_dml_lean.R's equivalent run.\n")
   t0 <- Sys.time()
   fit <- tryCatch(
@@ -251,21 +185,22 @@ for (ml in ML_METHODS) {
 # ─────────────────────────────────────────────────────────────────────────────
 if (length(results) > 0) {
   results_df <- bind_rows(results)
-  # Outcome-specific filename -- the earlier mdch_any run's output
-  # (dml_did_wide_covariates.csv: lasso -0.0955***, randomforest -0.0626 n.s.)
-  # is intentionally NOT overwritten; it stays as the secondary-outcome table.
+  # Outcome-specific filename
   write.csv(results_df, file.path(TABLES_DIR, "dml_did_wide_covariates_MDCH.csv"), row.names = FALSE)
   cat("\n── Wide-covariate results (official MDCH flag) ─────────────────────────\n")
   print(results_df)
   cat(sprintf("\nwrote %s\n", file.path(TABLES_DIR, "dml_did_wide_covariates_MDCH.csv")))
 
-  cat("\nCompare against 03_stage1_baseline_did.R's OLS baseline for the official MDCH flag\n")
-  cat("(Stage 2 -- the CASE/Andersen et al. replication). That comparison is what Stage 3\n")
-  cat("is actually testing: is the baseline sensitive to covariate adjustment/functional form.\n")
-  cat("If the wide-set estimates move meaningfully (especially lasso, which does its own\n")
-  cat("variable selection via regularization), that's evidence the richer covariate set is\n")
-  cat("adding real information -- exactly the setting where DML's high-dimensional tolerance\n")
-  cat("(vs att_gt()'s singular-matrix failure with the same rich set) pays off.\n")
+  cat("\nCompare against:\n")
+  cat("  - 03_stage1_baseline_did.R's OLS baseline (Stage 2, CASE/Andersen et al.\n")
+  cat("    replication) -- is the baseline sensitive to covariate adjustment/functional\n")
+  cat("    form. If the wide-set estimates move meaningfully (especially lasso, which\n")
+  cat("    does its own variable selection via regularisation), that's evidence the\n")
+  cat("    richer covariate set is adding real information -- exactly the setting where\n")
+  cat("    DML's high-dimensional tolerance (vs. archive/04_dml_did.R's singular-matrix\n")
+  cat("    failure with the same rich set) pays off.\n")
+  cat("  - 06_stage3_dml_lean.R's lean-covariate estimates -- same estimator, same\n")
+  cat("    outcome, only the covariate set differs.\n")
 } else {
   cat("\n✗ No MLmethod succeeded.\n")
 }

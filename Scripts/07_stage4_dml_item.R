@@ -1,55 +1,17 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # 07_stage4_dml_item.R
-# Stage 4 (Guy's 2026-07-17 narrative: "which items are affected by SCP" --
-# single-outcome DiD AND DML DiD for each of the 10 MDCH items).
+# Stage 4: DML DiD for each of the 10 MDCH items individually, using the same
+# wide, curated covariate set as 06b_stage3_dml_wide.R not the lean set,
+# since handling many covariates is the main benefit of ML/regularisation
+# here.
 #
-# Uses the SAME wide, curated covariate set as 06b_stage3_dml_wide.R
-# (not the lean 7-variable set) -- Guy's explicit decision: "best to just use
-# the wide covariate set, as this is the main benefit of using ML/
-# regularisation." See 06b's header for full curation rationale (which raw
-# KEEP_VARS were dropped and why) and the missingness fixes (WFTCBU/EMPSTATI/
-# ERENTBU/BENBU_UC excluded -- see that script's comments).
+# MLmethod: lasso and randomforest.
 #
-# MLmethod: lasso-only run completed 2026-07-21 (results already in
-# dml_did_item_level_wide.csv -- see below, NOT rerun by this version).
-# ZERO of 10 items were BH-significant under lasso (vs. 2 under 03's OLS
-# item-level regressions) -- see results_narrative.docx Section 8.
-#
-# 2026-07-21: added "randomforest" as a second method, per Guy's request, to
-# see (1) actual wide-set RF-per-item runtime (the "10+ hours" estimate below
-# was written before 06b's composite-outcome finding that wide-RF (2657s) was
-# actually FASTER than wide-lasso (4111s) on the full sample -- so that
-# estimate may be too pessimistic) and (2) whether RF changes any
-# significance conclusions. Also worth testing as a side effect: two items
-# (Warm coat, Outdoor play area) took ~3hrs each under lasso despite similar
-# sample sizes to other items that took 22-35min -- a plausible cause is
-# quasi-separation in one of glmnet's propensity sub-models, which has no
-# real analogue for randomForest's greedy tree-splitting (no MLE/convergence
-# step to fail). If RF does NOT reproduce that slowdown on the same two
-# items, that's supporting evidence for the quasi-separation theory; if it
-# DOES, that points to something harder in those items' data specifically.
-#
-# This run-mode change (ML_METHODS below) only runs the methods NOT already
-# present in the saved CSV for a given item, and merges with what's already
-# there -- lasso's confirmed numbers are never re-fit or overwritten.
-#
-# SAFETY NETS added 2026-07-21 (the lasso run had no checkpointing -- a hang
-# on a later item would have lost every earlier-completed item's result):
-#   - TIMEOUT_SECS: each item x method fit is capped via setTimeLimit(); a
-#     fit that exceeds this is treated as a failure (skipped, not blocking).
-#   - After every item completes, the full accumulated results-so-far are
-#     rewritten to a checkpoint CSV, so an interruption only costs whatever
-#     is currently in flight, never anything already finished.
-#
-# Baseline (non-DML) item-level DiD already exists separately in
-# 04_stage2_item_did.R (OLS, joint household-clustered model) -- that
-# satisfies the "single outcome DID" half of Stage 4's brief. This script is
-# the "Double ML DiD for each outcome" half.
+# Each item x method fit is capped by TIMEOUT_SECS via setTimeLimit() and
+# treated as failed (skipped) if it exceeds that.
 #
 # BH-FDR correction applied within each MLmethod across the 10 items, same
-# convention as 04_dml_did.R Stage 3 and 05_parallel_trends.R.
-#
-# Requires: same packages as 06_stage3_dml_lean.R.
+# convention as 03's item-level OLS and 05's parallel-trends tests.
 # ─────────────────────────────────────────────────────────────────────────────
 
 library(causalweight)
@@ -70,16 +32,9 @@ ALPHA      <- 0.05
 CLUSTERVAR <- "SERNUM"
 K_FOLDS    <- 3
 TRIM       <- 0.05
-ML_METHODS <- c("lasso", "randomforest")   # lasso already confirmed 2026-07-21; RF added per Guy's request
-TIMEOUT_SECS <- 9000   # 2.5hr cap per item x method fit (generous above composite-level wide-RF's 2657s);
-                        # a fit exceeding this is treated as failed/skipped, not left to block indefinitely.
-                        # CAVEAT: setTimeLimit() can only interrupt at points R checks for it -- a single
-                        # long-running call into compiled C/Fortran code (e.g. deep inside glmnet or
-                        # randomForest's internals) may not yield control back until it finishes regardless
-                        # of this limit. It should catch most pathological cases (like Warm coat/Outdoor
-                        # play's ~3hr lasso runs) but is not a guaranteed hard kill -- if a fit still runs
-                        # past TIMEOUT_SECS with no sign of stopping, you may still need to kill the R
-                        # process manually, same as before.
+ML_METHODS <- c("lasso", "randomforest")
+TIMEOUT_SECS <- 9000   # 2.5hr cap per item x method fit. A fit exceeding this is skipped, not left
+                        # to block indefinitely.
 
 MAIN_OUT_CSV       <- file.path(TABLES_DIR, "dml_did_item_level_wide.csv")
 CHECKPOINT_OUT_CSV <- file.path(TABLES_DIR, "dml_did_item_level_wide_CHECKPOINT.csv")
@@ -88,9 +43,6 @@ MDCH_ITEMS <- c("MDCH_BED", "MDCH_CEL", "MDCH_COAT", "MDCH_EQP", "MDCH_HOL",
                 "MDCH_PLAY", "MDCH_PLY", "MDCH_TEA", "MDCH_TRP", "MDCH_VEG")
 
 MDCH_LABELS <- c(
-  # Labels corrected 2026-07-28 against the official HBAI item wording (see
-  # 03_stage1_baseline_did.R's header for the full rationale) -- MDCH_TEA,
-  # MDCH_EQP and MDCH_PLAY were factually wrong, not just imprecise.
   MDCH_BED  = "Bed / bedroom",
   MDCH_CEL  = "Celebrations",
   MDCH_COAT = "Warm coat",
@@ -106,7 +58,7 @@ MDCH_LABELS <- c(
 cat("Loading data...\n")
 df <- fread(DATA_PATH)
 df[, YEAR := as.integer(YEAR)]
-df[, .rowid := .I]   # stable row index -- used to realign item columns after na.omit() below
+df[, .rowid := .I]   # stable row index used to realign item columns after na.omit() below
 
 if (!"post" %in% names(df)) {
   stop("`post` column not found in hbai_clean.csv -- rerun 01_hbai_prep.R first.")
@@ -120,7 +72,7 @@ for (v in MDCH_ITEMS) {
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
-# WIDE COVARIATE SET -- identical curation to 06b_stage3_dml_wide.R
+# WIDE COVARIATE SET
 # ─────────────────────────────────────────────────────────────────────────────
 CONTINUOUS_VARS <- c(
   "AGE", "AGEHD",                          # AGESP excluded -- structurally NA for non-couples
@@ -151,7 +103,7 @@ for (v in cov_cols) {
   df[[v]] <- ifelse(df[[v]] < 0, NA_real_, df[[v]])
 }
 
-# ── Complete-case on covariates alone (independent of which item we predict) ──
+# ── Complete-case on covariates alone ──
 cc_covs <- na.omit(df[, .SD, .SDcols = c(".rowid", "treated", "post", CLUSTERVAR, cov_cols)])
 cat(sprintf("  Complete-case sample on covariates alone: %s rows\n",
             format(nrow(cc_covs), big.mark = ",")))
@@ -189,10 +141,9 @@ cat(sprintf("  Design matrix: %d columns, %s rows (before per-item outcome filte
 # each item's own missingness can be applied on top without rebuilding the
 # whole covariate matrix per item.
 #
-# Resume/skip logic: if MAIN_OUT_CSV already has a row for a given
+# Resume/skip logic - if MAIN_OUT_CSV already has a row for a given
 # item x MLmethod combination (e.g. lasso, confirmed 2026-07-21), that
-# combination is NOT refit -- its saved row is carried forward as-is. This
-# means adding "randomforest" to ML_METHODS above only runs the new cells.
+# combination is not refit
 # ─────────────────────────────────────────────────────────────────────────────
 results <- list()
 if (file.exists(MAIN_OUT_CSV)) {
