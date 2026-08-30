@@ -1,71 +1,19 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # 12_dml_stability_check.R
-# ROBUSTNESS: finite-sample stability of the headline doubly robust DML
-# estimate (wide covariates, random forest nuisance models; the -0.045
-# figure quoted as the preferred estimate in Discussion Section 6.1's
-# economic-significance translation, ~40,500 children).
+# Finite-sample stability of the headline doubly robust DML
+# estimate.
+# Its nuisance models are cross-fit on a modest post-treatment Scottish
+# sample (~800 obs), so this refits the same 06b_stage3_dml_wide.R spec B
+# times, varying only the random seed (fold split + random forest draws),
+# to see how much the coefficient and significance move across refits.
 #
-# WHAT THIS TESTS AND WHY:
-# causalweight::didDML() cross-fits its nuisance models (k=3 folds by
-# default), and this paper's Discussion already flags, as an honest,
-# untested caveat, that those nuisance models are trained on a modest
-# post-treatment Scottish sample (~800 observations), so it's a fair
-# question whether the reported -0.045 coefficient is a stable estimate or
-# something that would land noticeably differently under a different random
-# fold split / random forest seed. This script answers that directly: refit
-# the same wide-covariate, random-forest DML specification used in
-# 06b_stage3_dml_wide.R, repeatedly, varying only the random seed (which
-# controls both the k-fold cross-fitting split and random forest's own
-# internal randomness), and look at how much the coefficient and
-# significance move across refits.
+# causalweight::didDML() hard-codes set.seed(1) on its first
+# line, silently overriding any seed set by the caller, so a first run of
+# this script came back 20/20 identical. `didDML_seeded()` below
+# is a copy of didDML()'s source with that one line changed to take
+# seed as a real parameter.
 #
-# CRITICAL FIX: the first run of this script came back with 20/20 reps
-# bit-for-bit identical, which is statistically impossible for a genuinely
-# stochastic algorithm and was investigated rather than reported at face
-# value. causalweight::didDML()'s actual source (fetched from
-# https://raw.githubusercontent.com/cran/causalweight/master/R/didDML.R)
-# hard-codes `set.seed(1)` on its very first line, before the fold split and
-# every downstream random forest fit. This silently overrides any seed set
-# by the caller beforehand, which is exactly why the first run's 20
-# "different-seed" reruns were all identical: there was no way to vary
-# anything through the package's public API. Fixed by defining
-# `didDML_seeded()` below: a verbatim copy of the package's own didDML()
-# with that one line changed to accept `seed` as a real parameter.
-# Everything else (the cross-fitting logic, the doubly robust score, the
-# clustered SE calculation) is unmodified original package code, not a
-# reimplementation, so this is still "same model, different seed," just via
-# a patched copy instead of the broken public call.
-#
-# Data preparation below is copy-pasted verbatim from 06b_stage3_dml_wide.R
-# (same covariate curation, same complete-case sample, same z-scoring/one-hot
-# encoding) so this is genuinely "same model, different seed," not a
-# different specification. Do not edit the covariate list here without
-# also updating 06b, or the comparison stops being apples-to-apples.
-#
-# RUNTIME: the (invalid, identical-output) first run logged ~1,415-1,440s
-# (~24 min) per rep, faster than 06b's original ~44 min estimate, probably
-# machine-load dependent. This script is built to run unattended overnight/
-# while away:
-#   - Each replication's result is written to the output CSV immediately
-#     after it completes (not batched at the end), so nothing is lost if
-#     the process is killed, the laptop sleeps, or you need to stop early.
-#   - If restarted, it skips seeds already present in the output CSV, so a
-#     partially-completed run picks up where it left off rather than
-#     re-running from scratch.
-#   - Default B=20 reps => roughly 20 x 24min =~ 8 hours. Lower B below if
-#     you want it done faster; whatever finishes by the time you check back
-#     in is usable, since more reps just narrows the estimate of the spread.
-#   - Output file is new (dml_stability_wide_rf_v2.csv); the old
-#     dml_stability_wide_rf.csv from the broken run is left in place but is
-#     not valid data and should not be used for the write-up.
-#
-# TO RUN (recommended, from Terminal, so it survives you closing RStudio):
-#   nohup caffeinate -i Rscript "Scripts/12_dml_stability_check.R" > dml_stability_log.txt 2>&1 &
-# `caffeinate -i` stops macOS sleeping while it runs (note: this does not
-# prevent lid-close sleep; leave the lid open and the machine plugged in).
-# `nohup` keeps it alive even if the terminal window/tab closes. The trailing
-# `&` backgrounds it. Check progress any time with:
-#   tail -f dml_stability_log.txt
+# Slow (~20-25 min/rep)
 # ─────────────────────────────────────────────────────────────────────────────
 
 library(causalweight)
@@ -74,10 +22,9 @@ library(data.table)
 library(tidyverse)
 
 # ─────────────────────────────────────────────────────────────────────────────
-# didDML_seeded(): verbatim copy of causalweight::didDML() (fetched
-# 2026-08-20 from the CRAN GitHub mirror), with `set.seed(1)` replaced by
-# `set.seed(seed)` and `seed` exposed as a parameter. This is the only
-# change. MLfunct() is an internal (non-exported) helper in the causalweight
+# didDML_seeded(): copy of causalweight::didDML() (fetched from the CRAN GitHub mirror), 
+# with `set.seed(1)` replaced by set.seed(seed)` and `seed` exposed as a parameter. This is the only
+# change. MLfunct() is an internal helper in the causalweight
 # package, referenced here via `causalweight:::MLfunct` since it isn't
 # available unqualified outside the package namespace.
 # ─────────────────────────────────────────────────────────────────────────────
@@ -172,7 +119,7 @@ K_FOLDS     <- 3
 TRIM        <- 0.05
 
 # ─────────────────────────────────────────────────────────────────────────────
-# DATA PREP: verbatim from 06b_stage3_dml_wide.R
+# DATA PREP: from 06b_stage3_dml_wide.R
 # ─────────────────────────────────────────────────────────────────────────────
 cat("Loading data...\n")
 df <- fread(DATA_PATH)
@@ -249,7 +196,7 @@ cat(sprintf("  Design matrix: %d columns, %s rows (should match 06b's original r
             ncol(x_mat), format(nrow(x_mat), big.mark = ",")))
 
 # ─────────────────────────────────────────────────────────────────────────────
-# STABILITY LOOP: now genuinely varies the seed via didDML_seeded()
+# STABILITY LOOP: varies the seed via didDML_seeded()
 # ─────────────────────────────────────────────────────────────────────────────
 # Appends one row immediately (rather than batching to write at the end), so a
 # killed process or a sleeping laptop only loses the in-progress rep, not the run.
