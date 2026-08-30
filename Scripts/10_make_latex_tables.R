@@ -1,35 +1,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # 10_make_latex_tables.R
-# Generates publication-ready LaTeX tables (booktabs style) for Stages 1-5 of
+# Generates publication-ready LaTeX tables for Stages 1-5 of
 # the results pipeline, for direct \input{} into the Overleaf write-up.
-#
-# Deliberately reads ONLY from the source CSVs confirmed (2026-07-30, by
-# grepping each stage script's write.csv() calls) to be current outputs of
-# the post-restructure (07-21) pipeline:
-#   Stage 1  <- 03_stage1_baseline_did.R  -> table_simple_did.csv,
-#                                             table_adj_did.csv,
-#                                             table_adj_ext_did.csv,
-#                                             table_item_did.csv
-#   Stage 2  <- 04_stage2_item_did.R      -> stacked_item_did.csv
-#   Stage 3  <- 06_stage3_dml_lean.R,
-#               06b_stage3_dml_wide.R     -> dml_did_causalweight_comparison_MDCH.csv,
-#                                             dml_did_wide_covariates_MDCH.csv
-#   Stage 4  <- 07_stage4_dml_item.R      -> dml_did_item_level_wide.csv
-#   Stage 5  <- 08_stage5_stacked_ml_did.R -> stage5_stacked_item_did.csv
-#
-# Deliberately does NOT read: summary_all_stages_comparison.csv or
-# dml_vs_ols_composite.csv (both reference the pre-restructure att_gt/
-# Sant'Anna-Zhao DR-DiD approach and the discarded Chang trial -- stale), nor
-# dml_composite_lasso.csv / dml_composite_rf.csv / dml_items_lasso.csv /
-# dml_items_rf.csv (all empty -- orphaned files from before the restructure).
-#
-# No external table-formatting packages required (no kableExtra/knitr) so
-# this runs in any R install that already has the base pipeline working.
-#
-# Output: one self-contained .tex file per table (a full `table` float --
-# \centering, booktabs rules, caption, label) written to tables/latex/,
-# each ready to \input{} directly into the paper. Captions are drafted but
-# meant to be edited to match final section numbering/wording.
 # ─────────────────────────────────────────────────────────────────────────────
 
 TABLES_DIR <- "/Users/guypigott/Claude/Projects/MSc Dissertation/tables"
@@ -52,19 +24,17 @@ fmt <- function(x, d = 3) {
 # string-concatenation infix, used throughout for readability
 `%+%` <- function(a, b) paste0(a, b)
 
-# escapes LaTeX special characters that appear in outcome/item labels
-# (outcome names like "Any deprivation (mdch_any)" contain underscores,
-# which would otherwise break compilation outside math mode)
-# escapes the LaTeX special characters that can plausibly appear in outcome
-# labels ("mdch_any" etc. contain underscores). Deliberately doesn't attempt
-# to handle backslash/tilde/caret -- none of the source labels contain them,
-# and a general-purpose escaper is unnecessary complexity for known data.
+# Escapes LaTeX special characters that can plausibly appear in outcome/item
+# labels (e.g. "mdch_any" contains an underscore, which would otherwise break
+# compilation outside math mode). Doesn't handle backslash/tilde/caret, since
+# none of the source labels contain them and a general-purpose escaper is
+# unnecessary complexity for known data.
 esc <- function(x) gsub("([&%$#_{}])", "\\\\\\1", x)
 
 # writes a complete table float. `body_lines` is a character vector of
 # already-formatted LaTeX table rows (each ending in "\\\\"), `colspec` is
 # the tabular column spec (e.g. "l c c c"). Notes are appended as a plain
-# footnotesize paragraph below the tabular -- deliberately not using
+# footnotesize paragraph below the tabular, deliberately not using
 # threeparttable/tablenotes so this has zero extra package dependencies
 # beyond a standard article class with booktabs.
 write_tex_table <- function(file, colspec, header, body_lines, caption, label,
@@ -78,7 +48,7 @@ write_tex_table <- function(file, colspec, header, body_lines, caption, label,
     "\\bottomrule",
     "\\end{tabular}"
   )
-  # `wide = TRUE` wraps the tabular in \resizebox to shrink it to \textwidth --
+  # `wide = TRUE` wraps the tabular in \resizebox to shrink it to \textwidth:
   # used for tables with many numeric columns (e.g. six-way country/period
   # splits) that otherwise overflow the page margin under pdflatex. This is
   # the one place this script relies on graphicx beyond booktabs, but the
@@ -95,11 +65,9 @@ write_tex_table <- function(file, colspec, header, body_lines, caption, label,
     tabular_lines
   )
   if (!is.null(notes)) {
-    # blank line here is load-bearing: without it, \end{tabular} and the
-    # footnotesize note run on as the same paragraph, so on any table
-    # narrower than \textwidth the note typesets beside the tabular instead
-    # of below it (found 2026-07-31 building the LaTeX draft -- Table 1/3
-    # in main.tex both showed this before the blank line was added).
+    # Blank line here is load-bearing: without it, \end{tabular} and the
+    # footnotesize note run on as one paragraph, so on any table narrower
+    # than \textwidth the note typesets beside the tabular instead of below it.
     lines <- c(lines, "", "\\vspace{4pt}", paste0("{\\footnotesize ", notes, "}"))
   }
   lines <- c(lines, "\\end{table}")
@@ -145,9 +113,9 @@ stage1_composite <- function() {
               paste("N (MDCH flag)",
                     n_flag_row(simple), n_flag_row(adj), n_flag_row(ext), sep = " & ") %+% " \\\\")
   # Food insecurity row only appears once table_simple_did.csv etc. have been
-  # regenerated with the new "Food insecurity" outcome added to
-  # 03_stage1_baseline_did.R's simple_outcomes list -- guarded so this
-  # function doesn't break against the older CSVs in the meantime.
+  # regenerated with the "Food insecurity" outcome added to
+  # 03_stage1_baseline_did.R's simple_outcomes list. Guarded so this
+  # function doesn't break against older CSVs in the meantime.
   if (length(n_food_row(simple)) > 0) {
     footer <- c(footer,
                 paste("N (food insecurity)",
@@ -178,10 +146,10 @@ stage1_items <- function() {
   body <- character(0)
   for (i in seq_len(nrow(d))) {
     r <- d[i, ]
-    # plain "Yes" rather than a literal unicode checkmark -- pdflatex (as
+    # Plain "Yes" rather than a literal unicode checkmark: pdflatex (as
     # opposed to xelatex/lualatex) errors on raw unicode glyphs like U+2713
     # unless inputenc/fontenc are specially configured, and this way there's
-    # no extra package dependency either
+    # no extra package dependency either.
     sigmark <- ifelse(r$sig_bh == "✓", "Yes", "")
     row1 <- paste(esc(r$label),
                    fmt(r$coef) %+% stars(r$pval),
@@ -209,7 +177,7 @@ stage2_stacked <- function() {
 
   # BH-correct the item-interacted rows within each spec (Simple / Adjusted)
   # separately, matching the paper's stated approach (correction applied
-  # across the 10 item-level tests) -- not present as a column in the raw
+  # across the 10 item-level tests). Not present as a column in the raw
   # CSV, so computed here rather than assumed.
   d$pval_bh <- NA_real_
   for (sp in unique(d$spec)) {
@@ -349,10 +317,9 @@ stage5_stacked_ml <- function() {
 
 # ── Parallel trends (quarterly): joint Wald pre-trend test summary ─────────
 #
-# Source: 05c_stage1_parallel_trends_quarterly.R -> table_A3_quarterly_pretrend_wald.csv
-# (confirmed via grep of that script's own write_csv() call). Deliberately
-# does NOT table table_A3_quarterly_composite.csv / table_A3_quarterly_items.csv
-# -- those are 24-quarter x up-to-21-column coefficient grids, one cell per
+# Source: 05c_stage1_parallel_trends_quarterly.R -> table_A3_quarterly_pretrend_wald.csv.
+# Does not table table_A3_quarterly_composite.csv / table_A3_quarterly_items.csv:
+# those are 24-quarter x up-to-21-column coefficient grids, one cell per
 # quarter per outcome, far too large for a printed table; that data is what
 # the pt_es_quarterly_*.png figures already visualise.
 
@@ -390,10 +357,9 @@ quarterly_pretrend_wald <- function() {
 
 # ── Summary statistics (02_summary_stats.R output) ─────────────────────────
 #
-# Source: 02_summary_stats.R, confirmed 2026-07-30 from Guy's console output
-# (that script's OUT_DIR is a *relative* "figures" path, so its output landed
-# outside the connected project folder -- these functions assume the four
-# CSVs below have been copied into TABLES_DIR; see chat).
+# Source: 02_summary_stats.R. That script's OUT_DIR is a relative "figures"
+# path, so its output lands outside the connected project folder; these
+# functions assume the four CSVs below have been copied into TABLES_DIR.
 
 summary_background <- function() {
   path <- file.path(TABLES_DIR, "background_characteristics.csv")
@@ -523,7 +489,7 @@ summary_outcomes_table <- function() {
 # controls | YEAR_f).
 #
 # Term labels below, esp. the ETH_f2-5 -> Mixed/Asian/Black/Other mapping,
-# were NOT taken from a codebook (none was available) -- they were confirmed
+# were not taken from a codebook (none was available); they were confirmed
 # empirically by matching this spec's coefficients against Andersen et al.'s
 # (2025) own published Table 3 values, which line up closely for every
 # ethnicity category on both outcomes (e.g. ETH_f4 = 0.178 here vs their
@@ -532,8 +498,8 @@ summary_outcomes_table <- function() {
 # available before this goes in the final write-up.
 #
 # No Constant/Intercept row: feols() with `| YEAR_f` absorbs the intercept
-# into the year fixed effects, unlike CASE's table which reports one --
-# not comparable, deliberately omitted rather than shown as a fake blank row.
+# into the year fixed effects, unlike CASE's table which reports one.
+# Not comparable, so deliberately omitted rather than shown as a fake blank row.
 stage1_case_exact <- function() {
   path <- file.path(TABLES_DIR, "table_case_exact_did.csv")
   if (!file.exists(path)) { cat("  ⚠ table_case_exact_did.csv not found in tables/ -- skipping.\n"); return(invisible(NULL)) }
