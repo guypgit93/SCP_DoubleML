@@ -25,12 +25,9 @@ setFixest_dict(c(treated = "Scotland"))   # display label for regression tables
 # ─────────────────────────────────────────────────────────────────────────────
 # CONFIG
 # ─────────────────────────────────────────────────────────────────────────────
-DATA_PATH   <- "/Users/guypigott/python-venv-demo/Dissertation/data/hbai_clean.csv"
-FIGURES_DIR <- "/Users/guypigott/Claude/Projects/MSc Dissertation/figures"
-TABLES_DIR  <- "/Users/guypigott/Claude/Projects/MSc Dissertation/tables"
-
-dir.create(FIGURES_DIR, showWarnings = FALSE, recursive = TRUE)   # no-op if it already exists
-dir.create(TABLES_DIR,  showWarnings = FALSE, recursive = TRUE)
+library(here)
+source(here("Scripts", "00_config.R"))
+DATA_PATH <- file.path(DATA_DIR, "hbai_clean.csv")
 
 SCP_EXPAND_YEAR <- 2023   # FY 2022/23: SCP expanded to all under-16s, £25/week
 ALPHA           <- 0.05

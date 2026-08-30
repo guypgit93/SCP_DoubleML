@@ -26,9 +26,9 @@ library(fixest)
 # ─────────────────────────────────────────────────────────────────────────────
 # CONFIG
 # ─────────────────────────────────────────────────────────────────────────────
-DATA_PATH  <- "/Users/guypigott/python-venv-demo/Dissertation/data/hbai_clean.csv"
-TABLES_DIR <- "/Users/guypigott/Claude/Projects/MSc Dissertation/tables"
-dir.create(TABLES_DIR, showWarnings = FALSE, recursive = TRUE)
+library(here)
+source(here("Scripts", "00_config.R"))
+DATA_PATH <- file.path(DATA_DIR, "hbai_clean.csv")
 
 set.seed(20260818)   # reproducibility
 B <- 999             # number of bootstrap replications
@@ -179,4 +179,4 @@ out <- data.frame(
 )
 write.csv(out, file.path(TABLES_DIR, "table_wildboot_headline.csv"), row.names = FALSE)
 cat(sprintf("\n✓ Saved tables/table_wildboot_headline.csv\n"))
-cat("\nCopy the printed coef / asymp_p / wildboot_p / wildboot CI numbers above back to Claude to write up.\n")
+cat("\nCopy the printed coef / asymp_p / wildboot_p / wildboot CI numbers above for the write-up.\n")

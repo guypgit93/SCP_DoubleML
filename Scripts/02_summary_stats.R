@@ -16,12 +16,9 @@ library(tidyverse)
 library(scales)
 
 # ── Paths ────────────────────────────────────────────────────────────────────
-DATA_ROOT   <- "/Users/guypigott/python-venv-demo/Dissertation"
-HBAI_CSV    <- file.path(DATA_ROOT, "data", "hbai_clean.csv")
-TABLES_DIR  <- "/Users/guypigott/Claude/Projects/MSc Dissertation/tables"
-FIGURES_DIR <- "/Users/guypigott/Claude/Projects/MSc Dissertation/figures"
-dir.create(TABLES_DIR, showWarnings = FALSE, recursive = TRUE)   # no-op if it already exists
-dir.create(FIGURES_DIR, showWarnings = FALSE, recursive = TRUE)
+library(here)
+source(here("Scripts", "00_config.R"))
+HBAI_CSV    <- file.path(DATA_DIR, "hbai_clean.csv")
 
 SCP_EXPAND_YEAR <- 2023   # FY 2022/23: SCP extended to all under-16s, £25/week
 

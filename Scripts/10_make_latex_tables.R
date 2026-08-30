@@ -4,8 +4,9 @@
 # the results pipeline, for direct \input{} into the Overleaf write-up.
 # ─────────────────────────────────────────────────────────────────────────────
 
-TABLES_DIR <- "/Users/guypigott/Claude/Projects/MSc Dissertation/tables"
-OUT_DIR    <- file.path(TABLES_DIR, "latex")
+library(here)
+source(here("Scripts", "00_config.R"))
+OUT_DIR <- file.path(TABLES_DIR, "latex")
 dir.create(OUT_DIR, showWarnings = FALSE, recursive = TRUE)
 
 # ── helpers ─────────────────────────────────────────────────────────────────
@@ -357,9 +358,8 @@ quarterly_pretrend_wald <- function() {
 
 # ── Summary statistics (02_summary_stats.R output) ─────────────────────────
 #
-# Source: 02_summary_stats.R. That script's OUT_DIR is a relative "figures"
-# path, so its output lands outside the connected project folder; these
-# functions assume the four CSVs below have been copied into TABLES_DIR.
+# Source: 02_summary_stats.R, which (like every script here) writes to the
+# shared TABLES_DIR from 00_config.R, so its CSVs are already in place.
 
 summary_background <- function() {
   path <- file.path(TABLES_DIR, "background_characteristics.csv")

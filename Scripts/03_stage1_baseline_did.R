@@ -35,12 +35,9 @@ setFixest_dict(c(
 # ─────────────────────────────────────────────────────────────────────────────
 # CONFIG
 # ─────────────────────────────────────────────────────────────────────────────
-DATA_PATH   <- "/Users/guypigott/python-venv-demo/Dissertation/data/hbai_clean.csv"
-FIGURES_DIR <- "/Users/guypigott/Claude/Projects/MSc Dissertation/figures"
-TABLES_DIR  <- "/Users/guypigott/Claude/Projects/MSc Dissertation/tables"
-
-dir.create(FIGURES_DIR, showWarnings = FALSE, recursive = TRUE)
-dir.create(TABLES_DIR,  showWarnings = FALSE, recursive = TRUE)
+library(here)
+source(here("Scripts", "00_config.R"))
+DATA_PATH <- file.path(DATA_DIR, "hbai_clean.csv")
 
 REF_YEAR   <- 2022   # last pre-treatment year; omitted in event study
 ALPHA      <- 0.05

@@ -8,19 +8,22 @@ All analysis uses the **harmonised Households Below Average Income (HBAI) extrac
 
 - Raw HBAI `.tab` files (FYE2016–FYE2024, 2023/24 prices): obtained from UKDS study 5828.
 - Raw FRS household-level files (for exact interview dates, used to refine the SCP post-treatment cutoff to 14 November 2022): obtained from the corresponding FRS UKDS study series.
-- `Scripts/01_hbai_prep.R` builds the two processed extracts (`hbai_clean.csv`, `hbai_clean_placebo.csv`) that every other script reads. These processed CSVs are also excluded from the repository under the same licence terms; anyone re-running this pipeline needs their own UKDS access and must set `DATA_ROOT` in `01_hbai_prep.R` to their own local path.
+- `Scripts/01_hbai_prep.R` builds the two processed extracts (`hbai_clean.csv`, `hbai_clean_placebo.csv`) into `data/` at the project root; every other script reads from there. Both raw and processed data are excluded from the repository under the licence terms (`data/` is gitignored); anyone re-running this pipeline needs their own UKDS access and must set `RAW_DATA_ROOT` in `Scripts/00_config.R` to their own local path.
 
 ## Requirements
 
-R (tidyverse, data.table, fixest, modelsummary, patchwork, causalweight, sandwich). No Python is used in this project.
+R (tidyverse, data.table, fixest, modelsummary, patchwork, causalweight, sandwich, here). No Python is used in this project.
+
+`here` resolves every path in `Scripts/00_config.R` relative to the project root automatically, so no other script needs editing to run on a different machine, only `RAW_DATA_ROOT` above.
 
 ## Pipeline: which script produces what
 
-Run in the order below; scripts 03–08, 11 and 12 each depend only on `hbai_clean.csv` from script 01, not on each other, so they can be run in any order after that. Script 10 must be run last, since it reformats the CSV outputs of 03–09 into the final `.tex` tables used in the dissertation.
+Run in the order below; scripts 03–08, 11 and 12 each depend only on `hbai_clean.csv` from script 01, not on each other, so they can be run in any order after that. Script 10 must be run last, since it reformats the CSV outputs of 03–09 into the final `.tex` tables used in the dissertation. Every script sources `Scripts/00_config.R` first, which defines `DATA_DIR`/`TABLES_DIR`/`FIGURES_DIR` and creates the latter two if missing.
 
 | Script | Purpose | Key outputs (`tables/`, `figures/`) |
 |---|---|---|
-| `01_hbai_prep.R` | Builds both analytic extracts from one shared load of the raw HBAI files: the main England/Scotland extract (constructs the MDCH flag, the ten deprivation items, `mdch_any`/`mdch_severe` composites, food insecurity, and the exact 14-Nov-2022 SCP post-treatment cutoff from FRS interview dates) and a second, wider extract including Wales and Northern Ireland for the falsification check. Merged from two near-duplicate scripts (01 + 01b) on 2026-08-28. | `hbai_clean.csv`, `hbai_clean_placebo.csv` (data, not checked in) |
+| `00_config.R` | Single source of truth for file paths, sourced by every other script. `DATA_DIR`/`TABLES_DIR`/`FIGURES_DIR` resolve automatically via `here`; `RAW_DATA_ROOT` is the one line to edit for your own UKDS extract location. | n/a (not a pipeline stage) |
+| `01_hbai_prep.R` | Builds both analytic extracts from one shared load of the raw HBAI files: the main England/Scotland extract (constructs the MDCH flag, the ten deprivation items, `mdch_any`/`mdch_severe` composites, food insecurity, and the exact 14-Nov-2022 SCP post-treatment cutoff from FRS interview dates) and a second, wider extract including Wales and Northern Ireland for the falsification check. Merged from two near-duplicate scripts (01 + 01b) on 2026-08-28. | `hbai_clean.csv`, `hbai_clean_placebo.csv` in `data/` (not checked in) |
 | `02_summary_stats.R` | Descriptive statistics: sample composition by year/country, outcome prevalence by country/period, background characteristics table. | `sample_composition.csv`, `background_characteristics.csv`, `summary_table.csv`, `table_a1_by_period.csv` |
 | `03_stage1_baseline_did.R` | Stage 1: baseline OLS DiD (Simple/Adjusted/Extended specifications) for the official MDCH flag, food insecurity, and the two composite outcomes; CASE exact-replication spec; FYE2022-exclusion and age-restricted robustness checks. | `table_simple_did.csv`, `table_adj_did.csv`, `table_adj_ext_did.csv`, `table_case_exact_did.csv`, `table_fye2022_excl_did.csv`, `table_age_restricted_did.csv`, `table_item_did.csv` |
 | `04_stage2_item_did.R` | Stage 2: item-stacked DiD (pooled and item-interacted, household-clustered). | `stacked_item_did.csv` |

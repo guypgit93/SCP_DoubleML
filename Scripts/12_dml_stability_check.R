@@ -107,9 +107,9 @@ didDML_seeded <- function(y, d, t, x, MLmethod = "lasso", est = "dr",
        pscores = param[, 5:8], outcomepred = param[, 9:11], treat = param[, 1], time = param[, 3])
 }
 
-DATA_PATH  <- "/Users/guypigott/python-venv-demo/Dissertation/data/hbai_clean.csv"
-TABLES_DIR <- "/Users/guypigott/Claude/Projects/MSc Dissertation/tables"
-dir.create(TABLES_DIR, showWarnings = FALSE, recursive = TRUE)
+library(here)
+source(here("Scripts", "00_config.R"))
+DATA_PATH <- file.path(DATA_DIR, "hbai_clean.csv")
 
 OUT_PATH    <- file.path(TABLES_DIR, "dml_stability_wide_rf_v2.csv")   # new file: v1 was invalid
 MASTER_SEED <- 20260818
@@ -265,4 +265,4 @@ cat(sprintf("Significant at 10%%: %d / %d reps (%.0f%%)\n",
             sum(final_ok$pval < 0.10), nrow(final_ok),
             100 * mean(final_ok$pval < 0.10)))
 cat(sprintf("\n✓ Full per-rep results in %s\n", OUT_PATH))
-cat("\nPaste this summary block (and the CSV if easy) back to Claude to write up.\n")
+cat("\nSave this summary block (and the CSV) for the write-up.\n")

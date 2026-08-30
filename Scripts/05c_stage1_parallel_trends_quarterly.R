@@ -26,12 +26,9 @@ setFixest_dict(c(treated = "Scotland"))   # display label for regression tables
 # ─────────────────────────────────────────────────────────────────────────────
 # CONFIG
 # ─────────────────────────────────────────────────────────────────────────────
-DATA_PATH    <- "/Users/guypigott/python-venv-demo/Dissertation/data/hbai_clean.csv"
-FIGURES_DIR  <- "/Users/guypigott/Claude/Projects/MSc Dissertation/figures"
-TABLES_DIR   <- "/Users/guypigott/Claude/Projects/MSc Dissertation/tables"
-
-dir.create(FIGURES_DIR, showWarnings = FALSE, recursive = TRUE)   # no-op if it already exists
-dir.create(TABLES_DIR,  showWarnings = FALSE, recursive = TRUE)
+library(here)
+source(here("Scripts", "00_config.R"))
+DATA_PATH <- file.path(DATA_DIR, "hbai_clean.csv")
 
 SCP_EXPAND_DATE <- as.Date("2022-11-14")   # under-16s expansion -- CASE's Table A3 cutoff
 ALPHA           <- 0.05

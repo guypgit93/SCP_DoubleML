@@ -23,12 +23,12 @@
 # =============================================================================
 
 library(tidyverse)
+library(here)
 
-# ---- Paths ------------------------------------------------------------------
-DATA_ROOT   <- "/Users/guypigott/python-venv-demo/Dissertation"
-HBAI_ROOT   <- file.path(DATA_ROOT, "UKDA-5828-tab", "tab", "23-24prices")
-OUT_MAIN    <- file.path(DATA_ROOT, "data", "hbai_clean.csv")
-OUT_PLACEBO <- file.path(DATA_ROOT, "data", "hbai_clean_placebo.csv")
+source(here("Scripts", "00_config.R"))
+HBAI_ROOT   <- file.path(RAW_DATA_ROOT, "UKDA-5828-tab", "tab", "23-24prices")
+OUT_MAIN    <- file.path(DATA_DIR, "hbai_clean.csv")
+OUT_PLACEBO <- file.path(DATA_DIR, "hbai_clean_placebo.csv")
 
 HBAI_FILES <- c(
   "i1518e_2324prices.tab",   # 2015/16 - 2017/18
@@ -103,7 +103,7 @@ recode_mdch_item <- function(x) {
 
 # Finds one year's raw household .tab file (prefers the _v2 revision if there is one)
 find_hhold <- function(ukda_folder) {
-  tab_root <- file.path(DATA_ROOT, paste0(ukda_folder, "-tab"), "tab")
+  tab_root <- file.path(RAW_DATA_ROOT, paste0(ukda_folder, "-tab"), "tab")
   if (!dir.exists(tab_root)) return(NA_character_)
   found <- list.files(tab_root, pattern = HHOLD_PATTERN, recursive = TRUE,
                       full.names = TRUE, ignore.case = TRUE)

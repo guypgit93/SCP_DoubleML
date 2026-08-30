@@ -15,11 +15,9 @@ library(ggplot2)
 # ─────────────────────────────────────────────────────────────────────────────
 # CONFIG
 # ─────────────────────────────────────────────────────────────────────────────
-DATA_PATH   <- "/Users/guypigott/python-venv-demo/Dissertation/data/hbai_clean_placebo.csv"
-TABLES_DIR  <- "/Users/guypigott/Claude/Projects/MSc Dissertation/tables"
-FIGURES_DIR <- "/Users/guypigott/Claude/Projects/MSc Dissertation/figures"
-dir.create(TABLES_DIR,  showWarnings = FALSE, recursive = TRUE)
-dir.create(FIGURES_DIR, showWarnings = FALSE, recursive = TRUE)
+library(here)
+source(here("Scripts", "00_config.R"))
+DATA_PATH <- file.path(DATA_DIR, "hbai_clean_placebo.csv")
 
 ALPHA <- 0.05
 
