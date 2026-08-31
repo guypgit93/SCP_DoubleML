@@ -165,7 +165,7 @@ stage1_items <- function() {
     colspec = "l c c c c c",
     header = header,
     body_lines = body,
-    caption = "Stage 1: item-level difference-in-differences (CASE-adjusted), Benjamini-Hochberg corrected",
+    caption = "Item-level difference-in-differences (CASE-adjusted), Benjamini-Hochberg corrected",
     label = "tab:stage1_items",
     notes = paste(sig_note, "Rows sorted by raw $p$-value. Sig. column marks BH-significance at the 5\\% FDR level across all ten items.")
   )
@@ -217,7 +217,7 @@ stage2_stacked <- function() {
     colspec = "l c c",
     header = header,
     body_lines = body,
-    caption = "Stage 2: item-stacked difference-in-differences, item- and year-fixed-effects model, household-clustered SEs",
+    caption = "Item-stacked difference-in-differences, item- and year-fixed-effects model, household-clustered SEs",
     label = "tab:stage2_stacked",
     notes = paste(sig_note, "\\textsuperscript{BH} marks significance at the 5\\% Benjamini-Hochberg FDR threshold within the Adjusted item-interacted spec (computed here; not in the source CSV).")
   )
@@ -250,7 +250,7 @@ stage3_dml_composite <- function() {
     colspec = "l c c",
     header = header,
     body_lines = body,
-    caption = "Stage 3: doubly robust DML difference-in-differences, official MDCH flag",
+    caption = "Doubly robust DML difference-in-differences, official MDCH flag",
     label = "tab:stage3_dml_composite",
     notes = paste(sig_note, "Wide-set ensemble not run (did not complete within a feasible runtime across items -- see Methodology 4.4). ATET = average treatment effect on the treated.")
   )
@@ -281,7 +281,7 @@ stage4_dml_items <- function() {
     colspec = "l c c",
     header = header,
     body_lines = body,
-    caption = "Stage 4: doubly robust DML difference-in-differences, per item (wide covariates)",
+    caption = "Doubly robust DML difference-in-differences, per item (wide covariates)",
     label = "tab:stage4_dml_items",
     notes = paste(sig_note, "None of the ten items are significant at the 5\\% BH-corrected threshold under either method.")
   )
@@ -310,7 +310,7 @@ stage5_stacked_ml <- function() {
     colspec = "l c c c",
     header = header,
     body_lines = body,
-    caption = "Stage 5: jointly estimated doubly robust ML-DiD across items",
+    caption = "Jointly estimated doubly robust ML-DiD across items",
     label = "tab:stage5_stacked_ml",
     notes = paste(sig_note, "Only items with complete data across the stacked model are shown; see Methodology 4.6.")
   )
@@ -558,7 +558,7 @@ stage1_case_exact <- function() {
     colspec = "l c c",
     header = header,
     body_lines = body,
-    caption = "Stage 1: CASE exact-replication spec (explicit Post term), all coefficients, cf. Table 3 of Andersen et al. (2025)",
+    caption = "CASE exact-replication specification (explicit Post term), all coefficients, cf. Table 3 of Andersen et al. (2025)",
     label = "tab:stage1_case_exact",
     notes = paste(sig_note,
       "Diagnostic robustness spec, not the headline Adjusted/Extended results reported elsewhere -- adds an explicit \\texttt{post} term alongside \\texttt{treated}, \\texttt{tp}, the six CASE controls, and year fixed effects, nesting Andersen et al.'s (2025) equation (1). Ethnicity category labels (Mixed/Asian/Black/Other, ref.\\ White) were confirmed empirically against Andersen et al.'s own Table 3 coefficients, not a codebook. Andersen et al.\\ use a stricter significance convention ($^{*}p<0.05$, $^{**}p<0.01$, $^{***}p<0.001$) than the $p<0.10/0.05/0.01$ used throughout this table and elsewhere in this paper -- do not compare star counts directly across the two.")

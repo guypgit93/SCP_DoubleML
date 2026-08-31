@@ -47,7 +47,7 @@ At annual level, and under Benjamini--Hochberg correction, every outcome and cov
 \begin{figure}[htbp]
 \centering
 \includegraphics[width=0.7\textwidth]{Figures/es_MDCH_flag.png}
-\caption{Scotland$\times$year event-study coefficients, official MDCH flag, annual granularity, relative to the FYE2022 reference year. Blue is the pre-treatment period, red is post-treatment, with 95\% confidence bands; the dashed line marks the November 2022 rollout.}
+\caption[Parallel-trends event study, official MDCH flag (annual)]{Scotland$\times$year event-study coefficients, official MDCH flag, annual granularity, relative to the FYE2022 reference year. Blue is the pre-treatment period, red is post-treatment, with 95\% confidence bands; the dashed line marks the November 2022 rollout.}
 \label{fig:pt_composite}
 \end{figure}
  
@@ -75,7 +75,7 @@ Fitting the ten deprivation items as ten independent regressions treats each ite
  
 Stage 3 asks whether the Section~\ref{sec:baseline-did} result depends on OLS's linear functional form and narrow six-variable control set, rather than on the treatment itself. A doubly robust, machine-learning-augmented DiD estimator relaxes both without reintroducing the bias a naive substitution would cause, for the reasons set out in Section~\ref{sec:lit-dml}.
  
-The estimator used is \citet{zimmert2020}'s efficient-score, doubly robust DiD estimator, implemented via \texttt{causalweight::didDML()}, chosen over \citet{chang2020}'s alternative for the reasons given in Section~\ref{sec:lit-dml}. For each of the four treatment$\times$time cells, the estimator fits a cross-fitted outcome-regression model and a cell-propensity model, combined into a doubly robust, Neyman-orthogonal score (Section~\ref{sec:lit-dml}) that does not bias the ITT estimate at first order.
+The estimator used is \citet{zimmert2020}'s efficient-score, doubly robust DiD estimator, implemented via \texttt{causalweight::didDML()}, chosen over \citet{chang2020}'s alternative for the reasons given in Section~\ref{sec:lit-dml}. For each of the four treatment$\times$time cells, the estimator fits a cross-fitted outcome-regression model and a cell-propensity model, combined into a doubly robust, Neyman-orthogonal score (Section~\ref{sec:lit-dml}) that does not bias the ITT estimate at first order.\footnote{Cross-fitting uses $k=3$ folds with a 5\% propensity-score trim, both \texttt{causalweight::didDML()} defaults. Appendix Table~\ref{tab:dmlstability} tests sensitivity to the cross-fitting split directly, by refitting the preferred specification 20 times under different fold-assignment seeds.}
  
 Two nuisance-model methods are compared: lasso, a linear method that (like OLS) cannot represent nonlinearities or interactions, and random forest, which can. Two covariate sets are also compared: the lean six CASE controls and the wide $\sim$35-variable set, feasible here only because of cross-fitting, since an earlier group-time ATT (\citeauthor{callawaysantanna2021}-style) attempt at the same wide set produced singular, rank-deficient models. Resulting ITT estimates for the official MDCH flag are reported under all combinations in Section~\ref{sec:res-dml}, plus a lasso/random-forest ensemble for the lean specification only, since the ensemble did not complete within a feasible runtime for the wide specification.
 

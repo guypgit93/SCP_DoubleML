@@ -4,11 +4,29 @@ Statistical analysis of the Scottish Child Payment (SCP) on child material depri
 
 ## Data
 
-All analysis uses the **harmonised Households Below Average Income (HBAI) extract of the Family Resources Survey (FRS)**, UK Data Service study number **5828**, distributed under a UKDS End User Licence via the UK Data Archive. Access requires a UKDS account and acceptance of the licence terms; the raw and processed data files are **not included in this repository** in line with that licence.
+All analysis uses the **harmonised Households Below Average Income (HBAI) extract of the Family Resources Survey (FRS)**, UK Data Service study number **5828**, classified by UKDS as *safeguarded* data and distributed under a UK Data Service End User Licence (EUL) via the UK Data Archive. Clause 4 of the EUL prohibits giving access to the data, or to any dataset derived from it (including this project's own cleaned extracts), to anyone who has not separately agreed to the same licence. **For that reason, no raw or processed data files are included in this repository or any accompanying replication package** — this is a licence condition, not a project choice.
 
-- Raw HBAI `.tab` files (FYE2016–FYE2024, 2023/24 prices): obtained from UKDS study 5828.
-- Raw FRS household-level files (for exact interview dates, used to refine the SCP post-treatment cutoff to 14 November 2022): obtained from the corresponding FRS UKDS study series.
-- `Scripts/01_hbai_prep.R` builds the two processed extracts (`hbai_clean.csv`, `hbai_clean_placebo.csv`) into `data/` at the project root; every other script reads from there. Both raw and processed data are excluded from the repository under the licence terms (`data/` is gitignored); anyone re-running this pipeline needs their own UKDS access and must set `RAW_DATA_ROOT` in `Scripts/00_config.R` to their own local path.
+### Obtaining the data
+
+Two separate UKDS studies are needed:
+
+1. **HBAI (study 5828)** — register for a free UK Data Service account at [ukdataservice.ac.uk](https://ukdataservice.ac.uk), then find [study 5828](https://datacatalogue.ukdataservice.ac.uk/studies/study/5828) in the data catalogue, select "Add to account," and accept the End User Licence when prompted. Download the `.tab` files for FYE2017–FYE2024 (2023/24 prices), excluding FYE2021 (COVID-disrupted, not used).
+2. **FRS household-level files (for exact interview dates)** — one separate UKDS study per year is needed, to recover the household interview date used to refine the SCP post-treatment cutoff to 14 November 2022 within FYE2023:
+
+   | FYE year | UKDS study number |
+   |---|---|
+   | 2017 | 8336 |
+   | 2018 | 8460 |
+   | 2019 | 8633 |
+   | 2020 | 8802 |
+   | 2021 | 8948 (unused — COVID year excluded) |
+   | 2022 | 9073 |
+   | 2023 | 9252 |
+   | 2024 | 9367 |
+
+Both are EUL/safeguarded data under the same registration and access process as study 5828.
+
+- `Scripts/01_hbai_prep.R` builds the two processed extracts (`hbai_clean.csv`, `hbai_clean_placebo.csv`) into `data/` at the project root; every other script reads from there. Both raw and processed data are excluded from the repository under the licence terms (`data/` is gitignored); anyone re-running this pipeline needs their own UKDS access to both studies above and must set `RAW_DATA_ROOT` in `Scripts/00_config.R` to their own local path, structured as `RAW_DATA_ROOT/UKDA-5828-tab/tab/23-24prices/` for HBAI and `RAW_DATA_ROOT/UKDA-<study>-tab/tab/` per FRS year (see `Scripts/01_hbai_prep.R` for the exact per-year study-number mapping).
 
 ## Requirements
 
