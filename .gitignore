@@ -52,3 +52,4 @@ testfile_delete_me.txt
 
 # ── Exceptions to the non-script rules above ──────────────────────────────
 !README.md
+.Rproj.user

@@ -10,10 +10,6 @@
 #   Pre      : FYE 2017–2022 (excl. FYE 2021 COVID)
 #   Post     : FYE 2023–2024 (£25/wk SCP for all under-16s from Nov 2022)
 #
-#   FYE 2024 is NOT excluded: it's on the same MDCH definition as every
-#   earlier year (the MDCH redesign only affects 2024/25, which isn't loaded)
-#   and is valid post-treatment data.
-#
 # Outputs
 #   tables/  — modelsummary regression tables (.tex and .docx)
 #   figures/ — event study plots (.png)

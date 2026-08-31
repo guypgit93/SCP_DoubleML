@@ -38,6 +38,17 @@ Run in the order below; scripts 03–08, 11 and 12 each depend only on `hbai_cle
 | `11_wild_cluster_bootstrap.R` | Robustness: hand-rolled wild cluster restricted (WCR) bootstrap-t inference on the headline Adjusted Scotland×Post coefficient (Cameron, Gelbach & Miller, 2008), as a confirmatory check on the household-clustered standard errors. Independent of every other script. | `table_wildboot_headline.csv` |
 | `12_dml_stability_check.R` | Robustness: refits the preferred wide-covariate, random-forest DML cell (script 06b) 20 times under different cross-fitting seeds, to test finite-sample stability given the modest post-treatment Scottish sample (~800 observations). Uses `didDML_seeded()`, a local patch of `causalweight::didDML()` exposing its internally hard-coded `set.seed(1)` as a parameter. Checkpointed/resumable — safe to interrupt and rerun. Independent of every other script. | `tables/dml_stability_wide_rf_v2.csv` |
 
+## Running everything at once
+
+`run_all.R` (project root) runs the full pipeline in the order above in one R session, catching and logging any per-script failure rather than stopping the whole run. `12_dml_stability_check.R` dominates total runtime (several hours), so it's built to run unattended overnight:
+
+```
+nohup caffeinate -i Rscript "run_all.R" > run_all_log.txt 2>&1 &
+tail -f run_all_log.txt
+```
+
+A per-script status/timing table is saved to `run_all_summary.csv` when it finishes.
+
 ## Dissertation source
 
 `latex/main.tex` compiles the dissertation itself (`pdflatex` → `bibtex` → `pdflatex` ×2). Section text lives in `Sections/*.tex`; tables produced by this pipeline live in `Sections/Tables/*.tex`.
